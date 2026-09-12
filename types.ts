@@ -198,3 +198,15 @@ export interface Job {
   createdAt: string; // ISO
   updatedAt: string; // ISO
 }
+
+// Singleton (not a collection like Cv/Job/Company): exactly one record, read/written
+// at a fixed server-side path, no `id`. Consumed by the (not yet built) job-scraping
+// feature.
+export interface SearchPreferences {
+  jobTitles: string[];
+  locations: string[];
+  workModes: JobWorkMode[];
+  minGrossAnnualSalary?: number;
+  cvId?: string;
+  updatedAt: string | null; // ISO; null until the first save ever succeeds
+}

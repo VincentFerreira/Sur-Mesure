@@ -7,6 +7,7 @@ import CompaniesPage from './pages/CompaniesPage';
 import CvsPage from './pages/CvsPage';
 import EditorPage from './pages/EditorPage';
 import InsightsPage from './pages/InsightsPage';
+import PreferencesPage from './pages/PreferencesPage';
 
 const App: React.FC = () => (
   <BrowserRouter>
@@ -19,6 +20,7 @@ const App: React.FC = () => (
         <Route path="/cvs" element={<CvsPage />} />
         <Route path="/cvs/:cvId" element={<EditorPage />} />
         <Route path="/insights" element={<InsightsPage />} />
+        <Route path="/preferences" element={<PreferencesPage />} />
         <Route path="*" element={<Navigate to="/jobs" replace />} />
       </Route>
     </Routes>
