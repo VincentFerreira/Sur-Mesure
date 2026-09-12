@@ -10,6 +10,7 @@ import { migrateLegacyCvs } from './server/migrate.js';
 import { registerTestHooks } from './server/testHooks.js';
 import { createCvsRouter } from './server/routes.cvs.js';
 import { createJobsRouter } from './server/routes.jobs.js';
+import { createCompaniesRouter } from './server/routes.companies.js';
 
 const app = express();
 const PORT = 3001;
@@ -22,9 +23,11 @@ const YARB_DATA_DIR = path.resolve(process.env.YARB_DATA_DIR ?? './data');
 const LEGACY_CV_STORAGE_DIR = path.join(process.cwd(), 'cvs');
 const CV_STORAGE_DIR = path.join(YARB_DATA_DIR, 'cvs');
 const JOBS_STORAGE_DIR = path.join(YARB_DATA_DIR, 'jobs');
+const COMPANIES_STORAGE_DIR = path.join(YARB_DATA_DIR, 'companies');
 
 ensureDir(CV_STORAGE_DIR);
 ensureDir(JOBS_STORAGE_DIR);
+ensureDir(COMPANIES_STORAGE_DIR);
 await migrateLegacyCvs({ legacyDir: LEGACY_CV_STORAGE_DIR, dataDir: YARB_DATA_DIR });
 
 const compileLimiter = rateLimit({
@@ -105,6 +108,7 @@ app.get('/health', (req, res) => {
 // CVthèque / Jobs API
 app.use('/api/cvs', createCvsRouter({ cvsDir: CV_STORAGE_DIR, jobsDir: JOBS_STORAGE_DIR }));
 app.use('/api/jobs', createJobsRouter({ jobsDir: JOBS_STORAGE_DIR, cvsDir: CV_STORAGE_DIR }));
+app.use('/api/companies', createCompaniesRouter({ companiesDir: COMPANIES_STORAGE_DIR, jobsDir: JOBS_STORAGE_DIR }));
 
 registerTestHooks(app, { dataDir: YARB_DATA_DIR });
 

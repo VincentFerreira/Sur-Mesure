@@ -150,9 +150,27 @@ export interface AtsResult {
   jobDescriptionHash: string;
 }
 
+export const COMPANY_SIZES = ['1-10', '11-50', '51-200', '201-1000', '1000+'] as const;
+export type CompanySize = (typeof COMPANY_SIZES)[number];
+
+export interface Company {
+  id: string;
+  name: string;
+  website?: string;
+  location?: string;
+  size?: CompanySize;
+  remoteFriendly?: boolean;
+  next40?: boolean;
+  frenchTech120?: boolean;
+  notes?: string;
+  createdAt: string; // ISO
+  updatedAt: string; // ISO
+}
+
 export interface Job {
   id: string;
   company: string;
+  companyId?: string;
   title: string;
   status: JobStatus;
   priority: 1 | 2 | 3;

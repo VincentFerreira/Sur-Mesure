@@ -94,12 +94,29 @@ const getBestGeminiModel = async (): Promise<string> => {
 
     const apiKey = process.env.API_KEY;
 
+    // Tracks the most informative failure seen across both API versions, so that if
+    // neither call finds the model we can report *why* (auth vs. network vs. genuinely
+    // absent) instead of always blaming "model not available" — a 401/403 here means the
+    // key itself is rejected and every model call downstream will fail the same way.
+    let lastAuthError: { status: number; reason?: string } | null = null;
+    let lastNetworkError: unknown = null;
+
     for (const apiVersion of ['v1', 'v1beta']) {
         try {
             const res = await fetch(
                 `https://generativelanguage.googleapis.com/${apiVersion}/models?key=${apiKey}`
             );
-            if (!res.ok) continue;
+            if (!res.ok) {
+                if (res.status === 401 || res.status === 403) {
+                    let reason: string | undefined;
+                    try {
+                        const errBody = await res.json();
+                        reason = errBody?.error?.status ?? errBody?.error?.details?.[0]?.reason;
+                    } catch { /* body not JSON, ignore */ }
+                    lastAuthError = { status: res.status, reason };
+                }
+                continue;
+            }
             const data = await res.json();
             const models: Array<{ name: string; supportedGenerationMethods?: string[]; outputTokenLimit?: number }> = data.models ?? [];
             const match = models.find(m => m.name.replace('models/', '') === GEMINI_MODEL
@@ -110,9 +127,25 @@ const getBestGeminiModel = async (): Promise<string> => {
                 console.log('[Gemini] Modèle :', cachedGeminiModel, '| outputTokenLimit:', cachedGeminiOutputLimit);
                 return cachedGeminiModel;
             }
-        } catch { /* try next version */ }
+        } catch (err) {
+            lastNetworkError = err;
+        }
     }
 
+    if (lastAuthError) {
+        throw new Error(
+            `Clé API Gemini invalide ou rejetée par Google (HTTP ${lastAuthError.status}`
+            + (lastAuthError.reason ? ` — ${lastAuthError.reason}` : '')
+            + `). Vérifiez GEMINI_API_KEY dans .env.local (une clé AI Studio valide `
+            + `commence par "AIzaSy"), puis redémarrez le serveur.`
+        );
+    }
+    if (lastNetworkError) {
+        throw new Error(
+            `Impossible de contacter l'API Gemini pour vérifier le modèle "${GEMINI_MODEL}" `
+            + `(erreur réseau : ${lastNetworkError instanceof Error ? lastNetworkError.message : String(lastNetworkError)}).`
+        );
+    }
     throw new Error(`Le modèle Gemini "${GEMINI_MODEL}" n'est pas disponible avec cette clé API.`);
 };
 
