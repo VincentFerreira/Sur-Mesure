@@ -36,7 +36,6 @@ const PreferencesForm: React.FC<FormProps> = ({ initial, cvs, onSave }) => {
   };
 
   const handleSave = async () => {
-    console.log('[DEBUG] handleSave called');
     setSaving(true);
     setError(null);
     // Flush any typed-but-not-yet-added draft text synchronously instead of relying on
@@ -47,7 +46,6 @@ const PreferencesForm: React.FC<FormProps> = ({ initial, cvs, onSave }) => {
     // this same function can see the committed value.
     const finalJobTitles = jobTitlesRef.current?.flush() ?? jobTitles;
     const finalLocations = locationsRef.current?.flush() ?? locations;
-    console.log('[DEBUG] finalJobTitles', finalJobTitles, 'finalLocations', finalLocations);
     try {
       await onSave({
         jobTitles: finalJobTitles,
@@ -56,10 +54,8 @@ const PreferencesForm: React.FC<FormProps> = ({ initial, cvs, onSave }) => {
         minGrossAnnualSalary: minSalary.trim() ? Number(minSalary) : undefined,
         cvId: cvId || undefined,
       });
-      console.log('[DEBUG] onSave resolved');
       setSaved(true);
-    } catch (err) {
-      console.log('[DEBUG] onSave threw', err);
+    } catch {
       setError('Save error. Is the server running?');
     } finally {
       setSaving(false);

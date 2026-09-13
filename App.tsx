@@ -8,6 +8,7 @@ import CvsPage from './pages/CvsPage';
 import EditorPage from './pages/EditorPage';
 import InsightsPage from './pages/InsightsPage';
 import PreferencesPage from './pages/PreferencesPage';
+import JobSearchPage from './pages/JobSearchPage';
 
 const App: React.FC = () => (
   <BrowserRouter>
@@ -21,6 +22,7 @@ const App: React.FC = () => (
         <Route path="/cvs/:cvId" element={<EditorPage />} />
         <Route path="/insights" element={<InsightsPage />} />
         <Route path="/preferences" element={<PreferencesPage />} />
+        <Route path="/job-search" element={<JobSearchPage />} />
         <Route path="*" element={<Navigate to="/jobs" replace />} />
       </Route>
     </Routes>

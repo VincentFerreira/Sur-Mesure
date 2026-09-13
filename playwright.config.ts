@@ -50,6 +50,10 @@ export default defineConfig({
         // reused instance, so it can't expose the reset/seed hooks on a live deployment.
         YARB_TEST_HOOKS: '1',
         YARB_DATA_DIR: E2E_DATA_DIR,
+        // Registers the deterministic, offline `fake` portal in the scraper registry
+        // (server/scrapers/index.js) so job-search e2e scenarios never depend on
+        // France Travail credentials or network access.
+        SCRAPER_PROVIDER: 'fake',
       },
     },
   ],

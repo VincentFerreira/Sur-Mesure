@@ -200,8 +200,8 @@ export interface Job {
 }
 
 // Singleton (not a collection like Cv/Job/Company): exactly one record, read/written
-// at a fixed server-side path, no `id`. Consumed by the (not yet built) job-scraping
-// feature.
+// at a fixed server-side path, no `id`. Consumed by the job-scraping feature (see
+// ScrapedJob below) to parameterize what to search for.
 export interface SearchPreferences {
   jobTitles: string[];
   locations: string[];
@@ -209,4 +209,40 @@ export interface SearchPreferences {
   minGrossAnnualSalary?: number;
   cvId?: string;
   updatedAt: string | null; // ISO; null until the first save ever succeeds
+}
+
+export const SCRAPED_JOB_STATUSES = ['new', 'dismissed', 'imported'] as const;
+export type ScrapedJobStatus = (typeof SCRAPED_JOB_STATUSES)[number];
+
+export const SCRAPED_JOB_FITS = ['high', 'medium', 'low'] as const;
+export type ScrapedJobFit = (typeof SCRAPED_JOB_FITS)[number];
+
+/**
+ * A job posting found by a scraper portal, staged for human review. Deliberately
+ * separate from `Job` — nothing here is a real, tracked application until the user
+ * explicitly imports it (mirrors ImportJobDialog's "extraction never saves anything
+ * by itself" rule).
+ */
+export interface ScrapedJob {
+  id: string;
+  dedupeKey: string; // company+title slug — cross-run, cross-portal dedup
+  portal: string; // portal id, e.g. 'france_travail'
+  title: string;
+  company: string;
+  location?: string;
+  contractType?: JobContractType;
+  salaryRange?: string;
+  url: string;
+  postedDate?: string; // ISO date, from the portal
+  descriptionRaw?: string;
+  // Set by the AI qualification pass (server/scrapers/claudeCli.js qualifyAll, via
+  // services/scraperService.ts qualifyScrapedJobs) run right after a scrape: judges
+  // this candidate against the user's actual configured job titles (not the AI-expanded
+  // search keywords, which are deliberately broader). 'low' fit candidates are
+  // auto-dismissed so the default New view stays on-topic.
+  fit?: ScrapedJobFit;
+  status: ScrapedJobStatus;
+  importedJobId?: string; // set once promoted to a real Job
+  firstSeenAt: string; // ISO
+  updatedAt: string; // ISO
 }

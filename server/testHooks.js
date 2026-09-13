@@ -18,11 +18,17 @@ export function registerTestHooks(app, { dataDir }) {
     });
 
     app.post('/api/__test__/seed', async (req, res) => {
-        const { cvs = [] } = req.body ?? {};
+        const { cvs = [], scrapedJobs = [] } = req.body ?? {};
         await fsp.mkdir(path.join(dataDir, 'cvs'), { recursive: true });
         for (const cv of cvs) {
             await writeJsonAtomic(path.join(dataDir, 'cvs', `${cv.id}.json`), cv);
         }
-        res.json({ success: true, seeded: { cvs: cvs.length } });
+        if (scrapedJobs.length > 0) {
+            await fsp.mkdir(path.join(dataDir, 'scraper-candidates'), { recursive: true });
+            for (const candidate of scrapedJobs) {
+                await writeJsonAtomic(path.join(dataDir, 'scraper-candidates', `${candidate.id}.json`), candidate);
+            }
+        }
+        res.json({ success: true, seeded: { cvs: cvs.length, scrapedJobs: scrapedJobs.length } });
     });
 }

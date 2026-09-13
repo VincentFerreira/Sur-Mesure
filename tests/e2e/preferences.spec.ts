@@ -66,6 +66,24 @@ test('typing a value and clicking Save directly, without pressing Enter first, s
   await expect(page.getByTestId('locations-list')).toContainText('Lyon');
 });
 
+test('add, remove, retype without committing, then Save: only the retyped value is kept', async ({ page }) => {
+  await page.goto('/preferences');
+
+  await page.getByTestId('job-titles-input').fill('Discarded');
+  await page.getByTestId('job-titles-add-button').click();
+  const pill = page.getByTestId('job-titles-list').locator('span', { hasText: 'Discarded' });
+  await pill.getByRole('button').click();
+  await expect(page.getByTestId('job-titles-list')).not.toBeVisible();
+
+  await page.getByTestId('job-titles-input').fill('Kept After Retype');
+  await page.getByTestId('preferences-save-button').click();
+  await expect(page.getByText('Saved')).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByTestId('job-titles-list')).toContainText('Kept After Retype');
+  await expect(page.locator('body')).not.toContainText('Discarded');
+});
+
 test('a removed tag no longer appears after saving and reloading', async ({ page }) => {
   await page.goto('/preferences');
 

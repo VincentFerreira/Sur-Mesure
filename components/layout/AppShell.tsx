@@ -1,9 +1,10 @@
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { Briefcase, Building2, Layers, BarChart3, Settings } from 'lucide-react';
+import { Briefcase, Building2, Layers, BarChart3, Settings, Radar } from 'lucide-react';
 
 const NAV_ITEMS = [
   { to: '/jobs', icon: Briefcase, label: 'Postes' },
+  { to: '/job-search', icon: Radar, label: 'Découverte' },
   { to: '/companies', icon: Building2, label: 'Entreprises' },
   { to: '/cvs', icon: Layers, label: 'CVthèque' },
   { to: '/insights', icon: BarChart3, label: 'Analyse' },

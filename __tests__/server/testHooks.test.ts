@@ -80,8 +80,22 @@ describe('registerTestHooks — enabled', () => {
             .send({ cvs: [{ id: 'seed-1', name: 'Seeded CV', data: {} }] });
 
         expect(res.status).toBe(200);
-        expect(res.body).toEqual({ success: true, seeded: { cvs: 1 } });
+        expect(res.body).toEqual({ success: true, seeded: { cvs: 1, scrapedJobs: 0 } });
         const written = JSON.parse(fs.readFileSync(path.join(dataDir, 'cvs', 'seed-1.json'), 'utf-8'));
         expect(written.name).toBe('Seeded CV');
+    });
+
+    it('seed writes the provided scraped jobs into scraper-candidates/', async () => {
+        process.env.NODE_ENV = 'test';
+        const { app, dataDir } = makeApp();
+
+        const res = await request(app)
+            .post('/api/__test__/seed')
+            .send({ scrapedJobs: [{ id: 'seed-1', title: 'QA Engineer', company: 'Acme', status: 'new' }] });
+
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ success: true, seeded: { cvs: 0, scrapedJobs: 1 } });
+        const written = JSON.parse(fs.readFileSync(path.join(dataDir, 'scraper-candidates', 'seed-1.json'), 'utf-8'));
+        expect(written.title).toBe('QA Engineer');
     });
 });

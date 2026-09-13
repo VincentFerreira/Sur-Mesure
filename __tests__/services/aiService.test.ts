@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// vi.hoisted so this mock function exists before the vi.mock factory below runs
+// (itself hoisted above the imports) — gives the batch-isolation test a stable
+// reference to control what the mocked Gemini client's generateContent resolves to,
+// per call.
+const mockGeminiGenerateContent = vi.hoisted(() => vi.fn());
+
 // Mock SDKs before importing aiService (vi.mock is hoisted automatically)
 vi.mock('@google/genai', () => ({
   GoogleGenAI: vi.fn(() => ({
-    models: { generateContent: vi.fn() },
+    models: { generateContent: mockGeminiGenerateContent },
   })),
   Type: {
     OBJECT: 'OBJECT',
@@ -201,3 +207,8 @@ describe('withTimeout', () => {
     await expect(resultPromise).rejects.toThrow('Timeout: the request took longer than 5s');
   });
 });
+
+// expandSearchKeywords / qualifyScrapedJobs (job-search AI qualification) moved
+// server-side to run via the `claude` CLI instead of Gemini/Claude API calls — see
+// __tests__/server/scrapers.fake.test.ts (fake-provider behavior) and
+// __tests__/server/scrapers.claudeCli.test.ts (CLI invocation + batch isolation).

@@ -12,6 +12,7 @@ import { createCvsRouter } from './server/routes.cvs.js';
 import { createJobsRouter } from './server/routes.jobs.js';
 import { createCompaniesRouter } from './server/routes.companies.js';
 import { createPreferencesRouter } from './server/routes.preferences.js';
+import { createScraperRouter } from './server/routes.scraper.js';
 
 const app = express();
 const PORT = 3001;
@@ -26,10 +27,12 @@ const CV_STORAGE_DIR = path.join(YARB_DATA_DIR, 'cvs');
 const JOBS_STORAGE_DIR = path.join(YARB_DATA_DIR, 'jobs');
 const COMPANIES_STORAGE_DIR = path.join(YARB_DATA_DIR, 'companies');
 const PREFERENCES_STORAGE_FILE = path.join(YARB_DATA_DIR, 'preferences.json');
+const SCRAPER_CANDIDATES_DIR = path.join(YARB_DATA_DIR, 'scraper-candidates');
 
 ensureDir(CV_STORAGE_DIR);
 ensureDir(JOBS_STORAGE_DIR);
 ensureDir(COMPANIES_STORAGE_DIR);
+ensureDir(SCRAPER_CANDIDATES_DIR);
 await migrateLegacyCvs({ legacyDir: LEGACY_CV_STORAGE_DIR, dataDir: YARB_DATA_DIR });
 
 const compileLimiter = rateLimit({
@@ -112,6 +115,14 @@ app.use('/api/cvs', createCvsRouter({ cvsDir: CV_STORAGE_DIR, jobsDir: JOBS_STOR
 app.use('/api/jobs', createJobsRouter({ jobsDir: JOBS_STORAGE_DIR, cvsDir: CV_STORAGE_DIR }));
 app.use('/api/companies', createCompaniesRouter({ companiesDir: COMPANIES_STORAGE_DIR, jobsDir: JOBS_STORAGE_DIR }));
 app.use('/api/preferences', createPreferencesRouter({ preferencesFilePath: PREFERENCES_STORAGE_FILE, cvsDir: CV_STORAGE_DIR }));
+app.use(
+    '/api/scraper',
+    createScraperRouter({
+        candidatesDir: SCRAPER_CANDIDATES_DIR,
+        jobsDir: JOBS_STORAGE_DIR,
+        preferencesFilePath: PREFERENCES_STORAGE_FILE,
+    })
+);
 
 registerTestHooks(app, { dataDir: YARB_DATA_DIR });
 

@@ -788,3 +788,11 @@ export const extractJobFromText = async (
         keywords: Array.isArray(extracted.keywords) ? extracted.keywords : [],
     };
 };
+
+// Job-search keyword expansion and candidate qualification now run server-side via
+// the `claude` CLI — see server/scrapers/claudeCli.js (expandKeywords/qualifyAll),
+// server/routes.scraper.js (POST /expand-keywords, POST /qualify), and
+// services/scraperService.ts (expandSearchKeywords/qualifyScrapedJobs), which is what
+// pages/JobSearchPage.tsx calls. They used to live here as direct Gemini/Claude API
+// calls; moved to avoid a separate billed API key/rate limit for what's otherwise the
+// same CLI mechanism the claude_cli search portal already uses.
