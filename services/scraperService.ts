@@ -1,5 +1,11 @@
-import { ScrapedJob, ScrapedJobFit, ScrapedJobStatus } from '../types';
+import { JobWorkMode, ScrapedJob, ScrapedJobFit, ScrapedJobStatus, ScrapedSignal } from '../types';
 import { apiFetch } from './apiClient';
+
+export interface QualifyResult {
+  fit: ScrapedJobFit;
+  score: number;
+  signals: ScrapedSignal[];
+}
 
 export interface PortalReportEntry {
   portal: string;
@@ -50,21 +56,22 @@ export async function expandSearchKeywords(jobTitles: string[]): Promise<string[
 }
 
 // Judges each candidate's fit against the *original* (non-expanded) job titles/
-// locations, and optionally a CV text (serializeCVForATS output), via the same `claude`
-// CLI mechanism.
+// locations/work modes, and optionally a CV text (serializeCVForATS output), via the
+// same `claude` CLI mechanism.
 export async function qualifyScrapedJobs(
   candidates: QualifyCandidateInput[],
   jobTitles: string[],
   locations: string[] = [],
-  cvText?: string
-): Promise<Record<string, ScrapedJobFit>> {
+  cvText?: string,
+  workModes: JobWorkMode[] = []
+): Promise<Record<string, QualifyResult>> {
   if (candidates.length === 0 || jobTitles.length === 0) return {};
-  const { fitMap } = await apiFetch<{ fitMap: Record<string, ScrapedJobFit> }>(
+  const { results } = await apiFetch<{ results: Record<string, QualifyResult> }>(
     '/scraper/qualify',
-    { method: 'POST', body: JSON.stringify({ candidates, jobTitles, locations, cvText }) },
+    { method: 'POST', body: JSON.stringify({ candidates, jobTitles, locations, workModes, cvText }) },
     'Failed to qualify scraped jobs'
   );
-  return fitMap;
+  return results;
 }
 
 export async function dismissScrapedJob(id: string): Promise<ScrapedJob> {
@@ -83,14 +90,23 @@ export async function markScrapedJobImported(id: string, importedJobId: string):
   );
 }
 
-// Setting fit to 'low' also dismisses the candidate in the same request, so it drops
-// out of the default New view without a second round-trip; 'high'/'medium' explicitly
-// (re-)confirm status 'new', which is a no-op for a just-created candidate.
-export async function setScrapedJobFit(id: string, fit: ScrapedJobFit): Promise<ScrapedJob> {
+// Persists fit+score+signals together in one PATCH. Setting fit to 'low' also
+// dismisses the candidate in the same request, so it drops out of the default New view
+// without a second round-trip; 'high'/'medium' explicitly (re-)confirm status 'new',
+// which is a no-op for a just-created candidate.
+export async function setScrapedJobQualification(id: string, qualification: QualifyResult): Promise<ScrapedJob> {
   return apiFetch<ScrapedJob>(
     `/scraper/candidates/${id}`,
-    { method: 'PATCH', body: JSON.stringify({ fit, status: fit === 'low' ? 'dismissed' : 'new' }) },
-    'Failed to update scraped job fit'
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        fit: qualification.fit,
+        score: qualification.score,
+        signals: qualification.signals,
+        status: qualification.fit === 'low' ? 'dismissed' : 'new',
+      }),
+    },
+    'Failed to update scraped job qualification'
   );
 }
 

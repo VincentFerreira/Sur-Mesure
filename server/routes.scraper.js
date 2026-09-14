@@ -1,9 +1,11 @@
 import express from 'express';
 import path from 'path';
 import { randomUUID } from 'crypto';
-import { listJsonFiles, readJson, writeJsonAtomic, deleteJson, ensureDir } from './store.js';
+import { listJsonFiles, readJson } from './store.js';
+import { listCandidates, getCandidate, insertCandidateIfNew, updateCandidate, deleteCandidate } from './scraperCandidatesStore.js';
 import { runScrape } from './scrapers/index.js';
 import { makeDedupeKey } from './scraperDedupe.js';
+import { extractDepartment, isRemoteLocation, titleCaseIfAllCaps, companyOrFallback, decodeHtmlEntities } from './scraperNormalize.js';
 import * as claudeCli from './scrapers/claudeCli.js';
 import * as fake from './scrapers/fake.js';
 
@@ -34,11 +36,6 @@ async function readPreferences(preferencesFilePath) {
     }
 }
 
-async function readAllCandidates(candidatesDir) {
-    const files = await listJsonFiles(candidatesDir);
-    return Promise.all(files.map((f) => readJson(path.join(candidatesDir, f))));
-}
-
 async function readAllJobs(jobsDir) {
     const files = await listJsonFiles(jobsDir);
     return Promise.all(files.map((f) => readJson(path.join(jobsDir, f))));
@@ -46,17 +43,18 @@ async function readAllJobs(jobsDir) {
 
 const normalize = (value) => (value ?? '').trim().toLowerCase();
 
-export function createScraperRouter({ candidatesDir, jobsDir, preferencesFilePath }) {
+const SCRAPED_SIGNAL_POLARITIES = ['positive', 'negative', 'neutral'];
+const isValidSignals = (signals) =>
+    Array.isArray(signals) &&
+    signals.every((s) => s && typeof s.label === 'string' && SCRAPED_SIGNAL_POLARITIES.includes(s.polarity));
+
+export function createScraperRouter({ candidatesDb, jobsDir, preferencesFilePath }) {
     const router = express.Router();
-    ensureDir(candidatesDir);
 
     router.get('/candidates', async (req, res) => {
         try {
-            let candidates = await readAllCandidates(candidatesDir);
             const statuses = [].concat(req.query.status ?? []);
-            if (statuses.length > 0) candidates = candidates.filter((c) => statuses.includes(c.status));
-            candidates.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-            res.json(candidates);
+            res.json(listCandidates(candidatesDb, statuses));
         } catch (err) {
             res.status(500).json(errorBody('internal_error', err.message));
         }
@@ -87,9 +85,6 @@ export function createScraperRouter({ candidatesDir, jobsDir, preferencesFilePat
                 locations: preferences.locations,
             });
 
-            const existingCandidates = await readAllCandidates(candidatesDir);
-            const existingKeys = new Set(existingCandidates.map((c) => c.dedupeKey));
-
             const existingJobs = await readAllJobs(jobsDir);
             const existingJobUrls = new Set(existingJobs.filter((j) => j.url).map((j) => j.url));
             const existingJobKeys = new Set(existingJobs.map((j) => `${normalize(j.company)}|${normalize(j.title)}`));
@@ -98,28 +93,38 @@ export function createScraperRouter({ candidatesDir, jobsDir, preferencesFilePat
             const now = new Date().toISOString();
             for (const item of results) {
                 const dedupeKey = makeDedupeKey(item.company, item.title);
-                if (existingKeys.has(dedupeKey)) continue;
                 if (item.url && existingJobUrls.has(item.url)) continue;
                 if (existingJobKeys.has(`${normalize(item.company)}|${normalize(item.title)}`)) continue;
 
+                // Decoded once up front: some portals (seen on France Travail) send literal
+                // HTML entities ("&amp;") in title/company/location/description rather than
+                // decoded text. dedupeKey above deliberately stays keyed on the raw,
+                // undecoded item fields so it doesn't shift for a job already seen.
+                const decodedLocation = decodeHtmlEntities(item.location);
                 const candidate = {
                     id: randomUUID(),
                     dedupeKey,
                     portal: item.portal,
-                    title: item.title,
-                    company: item.company,
-                    location: item.location,
+                    title: titleCaseIfAllCaps(decodeHtmlEntities(item.title)),
+                    company: companyOrFallback(decodeHtmlEntities(item.company), item.portal),
+                    location: decodedLocation,
+                    department: extractDepartment(decodedLocation),
+                    isRemote: isRemoteLocation(decodedLocation),
                     contractType: item.contractType,
                     salaryRange: item.salaryRange,
                     url: item.url,
                     postedDate: item.postedDate,
-                    descriptionRaw: item.descriptionRaw,
+                    descriptionRaw: decodeHtmlEntities(item.descriptionRaw),
                     status: 'new',
                     firstSeenAt: now,
                     updatedAt: now,
                 };
-                await writeJsonAtomic(path.join(candidatesDir, `${candidate.id}.json`), candidate);
-                existingKeys.add(dedupeKey);
+                // The dedupe_key UNIQUE constraint (server/scraperCandidatesStore.js) replaces
+                // the old in-memory Set scan — also transparently guards against the same
+                // dedupeKey appearing twice within this very `results` array, since each
+                // insert commits immediately.
+                const inserted = insertCandidateIfNew(candidatesDb, candidate);
+                if (!inserted) continue;
                 created.push(candidate);
             }
 
@@ -146,21 +151,23 @@ export function createScraperRouter({ candidatesDir, jobsDir, preferencesFilePat
     });
 
     // Judges each candidate's fit against the *original* (non-expanded) job titles/
-    // locations, and optionally a CV text, via the `claude` CLI. Body: { candidates:
-    // {id,title,company,location?,descriptionRaw?}[], jobTitles: string[], locations?:
-    // string[], cvText?: string }. Response: { fitMap: Record<id, fit> } — missing ids
-    // (a candidate the CLI couldn't judge) are simply absent, not an error.
+    // locations/work modes, and optionally a CV text, via the `claude` CLI. Body:
+    // { candidates: {id,title,company,location?,descriptionRaw?}[], jobTitles: string[],
+    // locations?: string[], workModes?: JobWorkMode[], cvText?: string }. Response:
+    // { results: Record<id, {fit,score,signals}> } — missing ids (a candidate the CLI
+    // couldn't judge) are simply absent, not an error.
     router.post('/qualify', async (req, res) => {
         const candidates = Array.isArray(req.body?.candidates) ? req.body.candidates : [];
         const jobTitles = Array.isArray(req.body?.jobTitles) ? req.body.jobTitles : [];
         const locations = Array.isArray(req.body?.locations) ? req.body.locations : [];
+        const workModes = Array.isArray(req.body?.workModes) ? req.body.workModes : [];
         const cvText = typeof req.body?.cvText === 'string' ? req.body.cvText : undefined;
-        if (candidates.length === 0 || jobTitles.length === 0) return res.json({ fitMap: {} });
+        if (candidates.length === 0 || jobTitles.length === 0) return res.json({ results: {} });
         try {
-            const fitMap = useFakeAi()
-                ? await fake.qualifyAll(candidates, jobTitles, locations, cvText)
-                : await claudeCli.qualifyAll(candidates, jobTitles, locations, cvText);
-            res.json({ fitMap });
+            const results = useFakeAi()
+                ? await fake.qualifyAll(candidates, jobTitles, locations, cvText, workModes)
+                : await claudeCli.qualifyAll(candidates, jobTitles, locations, cvText, workModes);
+            res.json({ results });
         } catch (err) {
             res.status(500).json(errorBody('internal_error', err.message));
         }
@@ -177,12 +184,15 @@ export function createScraperRouter({ candidatesDir, jobsDir, preferencesFilePat
         if (body.fit !== undefined && !SCRAPED_JOB_FITS.includes(body.fit)) {
             return res.status(400).json(errorBody('invalid_fit', `fit must be one of: ${SCRAPED_JOB_FITS.join(', ')}`));
         }
+        if (body.score !== undefined && (typeof body.score !== 'number' || body.score < 0 || body.score > 100)) {
+            return res.status(400).json(errorBody('invalid_score', 'score must be a number between 0 and 100'));
+        }
+        if (body.signals !== undefined && !isValidSignals(body.signals)) {
+            return res.status(400).json(errorBody('invalid_signals', 'signals must be an array of {label, polarity}'));
+        }
 
-        const filePath = path.join(candidatesDir, `${id}.json`);
-        let existing;
-        try {
-            existing = await readJson(filePath);
-        } catch {
+        const existing = getCandidate(candidatesDb, id);
+        if (!existing) {
             return res.status(404).json(errorBody('not_found', 'Scraped job not found'));
         }
 
@@ -202,11 +212,13 @@ export function createScraperRouter({ candidatesDir, jobsDir, preferencesFilePat
             ...(body.status !== undefined ? { status: body.status } : {}),
             ...(body.importedJobId !== undefined ? { importedJobId: body.importedJobId } : {}),
             ...(body.fit !== undefined ? { fit: body.fit } : {}),
+            ...(body.score !== undefined ? { score: body.score } : {}),
+            ...(body.signals !== undefined ? { signals: body.signals } : {}),
             updatedAt: new Date().toISOString(),
         };
 
         try {
-            await writeJsonAtomic(filePath, updated);
+            updateCandidate(candidatesDb, updated);
             res.json(updated);
         } catch (err) {
             res.status(500).json(errorBody('internal_error', err.message));
@@ -217,12 +229,8 @@ export function createScraperRouter({ candidatesDir, jobsDir, preferencesFilePat
         const { id } = req.params;
         if (!isValidId(id)) return res.status(400).json(errorBody('invalid_id', 'Invalid ID'));
         try {
-            await readJson(path.join(candidatesDir, `${id}.json`));
-        } catch {
-            return res.status(404).json(errorBody('not_found', 'Scraped job not found'));
-        }
-        try {
-            await deleteJson(path.join(candidatesDir, `${id}.json`));
+            const deleted = deleteCandidate(candidatesDb, id);
+            if (!deleted) return res.status(404).json(errorBody('not_found', 'Scraped job not found'));
             res.json({ success: true });
         } catch {
             res.status(404).json(errorBody('not_found', 'Scraped job not found'));

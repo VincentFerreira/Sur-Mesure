@@ -217,6 +217,18 @@ export type ScrapedJobStatus = (typeof SCRAPED_JOB_STATUSES)[number];
 export const SCRAPED_JOB_FITS = ['high', 'medium', 'low'] as const;
 export type ScrapedJobFit = (typeof SCRAPED_JOB_FITS)[number];
 
+export const SCRAPED_SIGNAL_POLARITIES = ['positive', 'negative', 'neutral'] as const;
+export type ScrapedSignalPolarity = (typeof SCRAPED_SIGNAL_POLARITIES)[number];
+
+// A short, chip-sized reason behind a candidate's score (e.g. {label: "Playwright",
+// polarity: "positive"}), returned by the AI qualification pass alongside `score` —
+// gives the review UI something to show besides a bare number, and gives us a way to
+// debug the judge's reasoning.
+export interface ScrapedSignal {
+  label: string;
+  polarity: ScrapedSignalPolarity;
+}
+
 /**
  * A job posting found by a scraper portal, staged for human review. Deliberately
  * separate from `Job` — nothing here is a real, tracked application until the user
@@ -230,6 +242,8 @@ export interface ScrapedJob {
   title: string;
   company: string;
   location?: string;
+  department?: string; // numeric French department code extracted from `location` at ingest, e.g. "92"
+  isRemote: boolean; // derived from `location` at ingest — always computable, defaults false
   contractType?: JobContractType;
   salaryRange?: string;
   url: string;
@@ -238,9 +252,15 @@ export interface ScrapedJob {
   // Set by the AI qualification pass (server/scrapers/claudeCli.js qualifyAll, via
   // services/scraperService.ts qualifyScrapedJobs) run right after a scrape: judges
   // this candidate against the user's actual configured job titles (not the AI-expanded
-  // search keywords, which are deliberately broader). 'low' fit candidates are
-  // auto-dismissed so the default New view stays on-topic.
+  // search keywords, which are deliberately broader). `fit` is derived server-side from
+  // `score` (see server/scrapers/scraperFit.js) — the client never re-thresholds `score`
+  // itself. 'low' fit candidates are auto-dismissed so the default New view stays
+  // on-topic. `score`/`signals` are absent for candidates qualified before this field
+  // existed, or when the qualification pass failed for them — no backfill, these
+  // candidates are short-lived (reviewed and cleared quickly), unlike e.g. CVs.
   fit?: ScrapedJobFit;
+  score?: number; // 0-100
+  signals?: ScrapedSignal[];
   status: ScrapedJobStatus;
   importedJobId?: string; // set once promoted to a real Job
   firstSeenAt: string; // ISO

@@ -81,3 +81,35 @@ test('importing a scraped job prefills JobForm, creates a real job, and moves th
   await page.goto('/jobs');
   await expect(page.locator('tr', { hasText: company })).toBeVisible();
 });
+
+test('a qualified candidate renders its score, tier group, and chips', async ({ page, request }) => {
+  test.skip(!(await testHooksAvailable(request)), 'Test hooks not enabled on this server instance.');
+
+  const suffix = unique();
+  const candidate = {
+    id: crypto.randomUUID(),
+    dedupeKey: `qualified-${suffix}`,
+    portal: 'france_travail',
+    title: `QA Playwright ${suffix}`,
+    company: `Qualified Co ${suffix}`,
+    location: 'Paris',
+    isRemote: false,
+    url: `https://example.test/jobs/${suffix}`,
+    status: 'new',
+    fit: 'high',
+    score: 92,
+    signals: [
+      { label: 'Playwright', polarity: 'positive' },
+      { label: 'TypeScript', polarity: 'positive' },
+    ],
+    firstSeenAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await request.post('http://localhost:3001/api/__test__/seed', { data: { scrapedJobs: [candidate] } });
+
+  await page.goto('/job-search');
+  await expect(page.getByTestId('scraped-jobs-group-high')).toContainText('Fort · 1');
+  await expect(page.getByTestId(`scraped-job-score-${candidate.id}`)).toContainText('92');
+  await expect(page.getByTestId(`scraped-job-signal-${candidate.id}-0`)).toContainText('Playwright');
+  await expect(page.getByTestId(`scraped-job-portal-${candidate.id}`)).toContainText('France Travail');
+});

@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { ensureDir } from './server/store.js';
-import { migrateLegacyCvs } from './server/migrate.js';
+import { migrateLegacyCvs, migrateScraperCandidatesToSqlite } from './server/migrate.js';
 import { registerTestHooks } from './server/testHooks.js';
 import { createCvsRouter } from './server/routes.cvs.js';
 import { createJobsRouter } from './server/routes.jobs.js';
@@ -27,13 +27,21 @@ const CV_STORAGE_DIR = path.join(YARB_DATA_DIR, 'cvs');
 const JOBS_STORAGE_DIR = path.join(YARB_DATA_DIR, 'jobs');
 const COMPANIES_STORAGE_DIR = path.join(YARB_DATA_DIR, 'companies');
 const PREFERENCES_STORAGE_FILE = path.join(YARB_DATA_DIR, 'preferences.json');
-const SCRAPER_CANDIDATES_DIR = path.join(YARB_DATA_DIR, 'scraper-candidates');
+// Scraper candidates moved off flat JSON files to SQLite (unlike cvs/jobs/companies,
+// this collection has no retention policy and grows unbounded with every scrape run —
+// see server/scraperCandidatesStore.js). SCRAPER_CANDIDATES_LEGACY_DIR is now only a
+// read-only migration source, never written to again.
+const SCRAPER_CANDIDATES_DB_PATH = path.join(YARB_DATA_DIR, 'scraper-candidates.sqlite');
+const SCRAPER_CANDIDATES_LEGACY_DIR = path.join(YARB_DATA_DIR, 'scraper-candidates');
 
 ensureDir(CV_STORAGE_DIR);
 ensureDir(JOBS_STORAGE_DIR);
 ensureDir(COMPANIES_STORAGE_DIR);
-ensureDir(SCRAPER_CANDIDATES_DIR);
 await migrateLegacyCvs({ legacyDir: LEGACY_CV_STORAGE_DIR, dataDir: YARB_DATA_DIR });
+const { db: candidatesDb } = await migrateScraperCandidatesToSqlite({
+    legacyDir: SCRAPER_CANDIDATES_LEGACY_DIR,
+    dbPath: SCRAPER_CANDIDATES_DB_PATH,
+});
 
 const compileLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -118,13 +126,13 @@ app.use('/api/preferences', createPreferencesRouter({ preferencesFilePath: PREFE
 app.use(
     '/api/scraper',
     createScraperRouter({
-        candidatesDir: SCRAPER_CANDIDATES_DIR,
+        candidatesDb,
         jobsDir: JOBS_STORAGE_DIR,
         preferencesFilePath: PREFERENCES_STORAGE_FILE,
     })
 );
 
-registerTestHooks(app, { dataDir: YARB_DATA_DIR });
+registerTestHooks(app, { dataDir: YARB_DATA_DIR, candidatesDb });
 
 export { app };
 

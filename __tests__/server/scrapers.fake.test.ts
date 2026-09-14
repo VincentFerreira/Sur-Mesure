@@ -24,14 +24,18 @@ describe('expandKeywords (fake)', () => {
 });
 
 describe('qualifyAll (fake)', () => {
-    it('rates strong title overlap with the target titles as high fit', async () => {
+    it('rates strong title overlap with the target titles as high fit, with a score and signals', async () => {
         const result = await qualifyAll([{ id: '1', title: 'Senior QA Engineer', company: 'Acme' }], ['QA Engineer'], [], undefined);
-        expect(result['1']).toBe('high');
+        expect(result['1'].fit).toBe('high');
+        expect(result['1'].score).toBeGreaterThanOrEqual(0);
+        expect(result['1'].score).toBeLessThanOrEqual(100);
+        expect(result['1'].signals.length).toBeGreaterThan(0);
+        expect(result['1'].signals[0]).toEqual({ label: 'Titre aligné', polarity: 'positive' });
     });
 
     it('rates a genuinely different job family as low fit', async () => {
         const result = await qualifyAll([{ id: '1', title: 'Sales Manager', company: 'Acme' }], ['QA Engineer'], [], undefined);
-        expect(result['1']).toBe('low');
+        expect(result['1'].fit).toBe('low');
     });
 
     it('processes all candidates without losing any result', async () => {
@@ -47,7 +51,7 @@ describe('qualifyAll (fake)', () => {
             [],
             undefined
         );
-        expect(result['1']).toBe('high');
+        expect(result['1'].fit).toBe('high');
     });
 
     it('downgrades fit by one level when the location does not match any target location', async () => {
@@ -57,7 +61,7 @@ describe('qualifyAll (fake)', () => {
             ['Paris'],
             undefined
         );
-        expect(result['1']).toBe('medium');
+        expect(result['1'].fit).toBe('medium');
     });
 
     it('keeps fit when the location matches a target location', async () => {
@@ -67,7 +71,7 @@ describe('qualifyAll (fake)', () => {
             ['Paris'],
             undefined
         );
-        expect(result['1']).toBe('high');
+        expect(result['1'].fit).toBe('high');
     });
 
     it('treats a "Remote"-style target location as satisfied by any remote posting', async () => {
@@ -77,7 +81,7 @@ describe('qualifyAll (fake)', () => {
             ['Remote France'],
             undefined
         );
-        expect(result['1']).toBe('high');
+        expect(result['1'].fit).toBe('high');
     });
 
     it('never upgrades an off-topic title to a passing fit based on location alone', async () => {
@@ -87,7 +91,70 @@ describe('qualifyAll (fake)', () => {
             ['Paris'],
             undefined
         );
-        expect(result['1']).toBe('low');
+        expect(result['1'].fit).toBe('low');
+    });
+
+    describe('with acceptable work modes configured', () => {
+        it('downgrades fit and tags the mismatch when an on-site-only posting is not acceptable', async () => {
+            const result = await qualifyAll(
+                [
+                    {
+                        id: '1',
+                        title: 'Senior QA Engineer',
+                        company: 'Acme',
+                        location: 'Paris',
+                        descriptionRaw: 'Poste 100% présentiel, aucun télétravail possible.',
+                    },
+                ],
+                ['QA Engineer'],
+                [],
+                undefined,
+                ['hybrid', 'remote']
+            );
+            expect(result['1'].fit).toBe('medium');
+            expect(result['1'].signals).toContainEqual({ label: 'Sur site non souhaité', polarity: 'negative' });
+        });
+
+        it('does not downgrade when the detected work mode is acceptable', async () => {
+            const result = await qualifyAll(
+                [
+                    {
+                        id: '1',
+                        title: 'Senior QA Engineer',
+                        company: 'Acme',
+                        descriptionRaw: 'Poste hybride, 2 jours de télétravail par semaine.',
+                    },
+                ],
+                ['QA Engineer'],
+                [],
+                undefined,
+                ['hybrid', 'remote']
+            );
+            expect(result['1'].fit).toBe('high');
+            expect(result['1'].signals).toContainEqual({ label: 'Mode de travail aligné', polarity: 'positive' });
+        });
+
+        it('does not downgrade when no work mode preference is configured', async () => {
+            const result = await qualifyAll(
+                [{ id: '1', title: 'Senior QA Engineer', company: 'Acme', descriptionRaw: '100% présentiel, aucun télétravail.' }],
+                ['QA Engineer'],
+                [],
+                undefined,
+                []
+            );
+            expect(result['1'].fit).toBe('high');
+        });
+
+        it('does not penalize when the work mode cannot be determined from the text', async () => {
+            const result = await qualifyAll(
+                [{ id: '1', title: 'Senior QA Engineer', company: 'Acme', descriptionRaw: 'Great team, competitive salary.' }],
+                ['QA Engineer'],
+                [],
+                undefined,
+                ['remote']
+            );
+            expect(result['1'].fit).toBe('high');
+        });
     });
 
     describe('with a CV provided', () => {
@@ -107,7 +174,7 @@ describe('qualifyAll (fake)', () => {
                 [],
                 cvText
             );
-            expect(result['1']).toBe('high');
+            expect(result['1'].fit).toBe('high');
         });
 
         it('downgrades fit by one level when the CV shares no significant words with the posting description', async () => {
@@ -124,7 +191,7 @@ describe('qualifyAll (fake)', () => {
                 [],
                 cvText
             );
-            expect(result['1']).toBe('medium');
+            expect(result['1'].fit).toBe('medium');
         });
 
         it('never upgrades an off-topic title to a passing fit based on the CV alone', async () => {
@@ -134,7 +201,7 @@ describe('qualifyAll (fake)', () => {
                 [],
                 cvText
             );
-            expect(result['1']).toBe('low');
+            expect(result['1'].fit).toBe('low');
         });
 
         it('does not affect fit when no CV is provided (backward compatible)', async () => {
@@ -144,7 +211,7 @@ describe('qualifyAll (fake)', () => {
                 [],
                 undefined
             );
-            expect(result['1']).toBe('high');
+            expect(result['1'].fit).toBe('high');
         });
     });
 });

@@ -6,27 +6,36 @@ import { usePreferencesStore } from '../store/preferencesStore';
 import { useJobsStore } from '../store/jobsStore';
 import { ScrapedJob, ScrapedJobStatus } from '../types';
 import JobForm from '../components/jobs/JobForm';
-import ScrapedJobsTable from '../components/scraper/ScrapedJobsTable';
-import { portalLabel } from '../components/scraper/scrapedJobMeta';
+import ScrapedJobsList from '../components/scraper/ScrapedJobsList';
+import { formatRelativeDate, portalLabel } from '../components/scraper/scrapedJobMeta';
 import { CreateJobInput } from '../services/jobService';
 import { expandSearchKeywords, qualifyScrapedJobs } from '../services/scraperService';
 import { serializeCVForATS } from '../services/aiService';
 import { loadCV } from '../services/cvStorageService';
 
 const TABS: ScrapedJobStatus[] = ['new', 'dismissed', 'imported'];
-const TAB_LABELS: Record<ScrapedJobStatus, string> = { new: 'New', dismissed: 'Dismissed', imported: 'Imported' };
+const TAB_LABELS: Record<ScrapedJobStatus, string> = { new: 'Nouvelles', dismissed: 'Écartées', imported: 'Importées' };
 
 type PipelineStage = 'idle' | 'expanding' | 'searching' | 'qualifying';
 const STAGE_LABELS: Record<PipelineStage, string> = {
-  idle: 'Run search',
-  expanding: 'Widening keywords…',
-  searching: 'Searching…',
-  qualifying: 'Filtering results…',
+  idle: 'Lancer un scrape',
+  expanding: 'Élargissement des mots-clés…',
+  searching: 'Recherche…',
+  qualifying: 'Analyse des résultats…',
 };
 
 const JobSearchPage: React.FC = () => {
-  const { candidates, loading, error, lastRunReport, fetchCandidates, runScrape, dismissCandidate, importCandidate, setCandidateFit } =
-    useScraperStore();
+  const {
+    candidates,
+    loading,
+    error,
+    lastRunReport,
+    fetchCandidates,
+    runScrape,
+    dismissCandidate,
+    importCandidate,
+    setCandidateQualification,
+  } = useScraperStore();
   const { preferences, fetchPreferences } = usePreferencesStore();
   const { addJob } = useJobsStore();
   const [tab, setTab] = useState<ScrapedJobStatus>('new');
@@ -43,7 +52,16 @@ const JobSearchPage: React.FC = () => {
   }, [fetchCandidates, fetchPreferences]);
 
   const visibleCandidates = useMemo(() => candidates.filter((c) => c.status === tab), [candidates, tab]);
+  const tabCounts = useMemo(() => {
+    const counts: Record<ScrapedJobStatus, number> = { new: 0, dismissed: 0, imported: 0 };
+    for (const c of candidates) counts[c.status] += 1;
+    return counts;
+  }, [candidates]);
   const hasJobTitles = (preferences?.jobTitles.length ?? 0) > 0;
+  const lastScrapeAt = useMemo(
+    () => candidates.reduce((max, c) => (c.firstSeenAt > max ? c.firstSeenAt : max), ''),
+    [candidates]
+  );
 
   const openImport = (candidate: ScrapedJob) => {
     setImporting(candidate);
@@ -68,11 +86,11 @@ const JobSearchPage: React.FC = () => {
   //    Arbeitnow, Freehire, and a `claude` CLI invocation using Claude Code's own
   //    WebSearch/WebFetch tools for boards with no structured API, mirroring
   //    ai-job-search's WebSearch fallback.
-  // 3. Judge each new candidate against the *original* (non-widened) job titles and
-  //    locations, and — when preferences.cvId is set — the actual CV content (same
-  //    serialization the ATS Checker uses), for a genuine CV-to-posting fit instead of
-  //    keyword matching alone — POST /api/scraper/qualify. 'low' fit auto-dismisses so
-  //    the default New view stays on-topic.
+  // 3. Judge each new candidate against the *original* (non-widened) job titles,
+  //    locations and work modes, and — when preferences.cvId is set — the actual CV
+  //    content (same serialization the ATS Checker uses), for a genuine CV-to-posting
+  //    fit instead of keyword matching alone — POST /api/scraper/qualify. 'low' fit
+  //    auto-dismisses so the default New view stays on-topic.
   // Steps 1 and 3 degrade gracefully: if a call (or the CV load) fails, the pipeline
   // falls back to the configured titles / title-and-location-only fit / leaves
   // candidates untagged, rather than losing the run.
@@ -108,7 +126,7 @@ const JobSearchPage: React.FC = () => {
         }
       }
       try {
-        const fitMap = await qualifyScrapedJobs(
+        const results = await qualifyScrapedJobs(
           result.created.map((c) => ({
             id: c.id,
             title: c.title,
@@ -118,10 +136,11 @@ const JobSearchPage: React.FC = () => {
           })),
           preferences.jobTitles,
           preferences.locations,
-          cvText
+          cvText,
+          preferences.workModes
         );
         await Promise.all(
-          result.created.map((c) => (fitMap[c.id] ? setCandidateFit(c.id, fitMap[c.id]) : Promise.resolve(undefined)))
+          result.created.map((c) => (results[c.id] ? setCandidateQualification(c.id, results[c.id]) : Promise.resolve(undefined)))
         );
       } catch (err) {
         console.error('Qualification pass failed; new candidates were left unfiltered.', err);
@@ -135,12 +154,12 @@ const JobSearchPage: React.FC = () => {
     <div className="h-full overflow-y-auto" data-testid="job-search-page">
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-xl font-bold text-slate-800">Job search</h1>
+          <h1 className="text-xl font-bold text-slate-800">Découverte</h1>
           <button
             onClick={handleRunSearch}
             disabled={stage !== 'idle' || !hasJobTitles}
             data-testid="run-scrape-button"
-            title={hasJobTitles ? undefined : 'Set at least one job title in Preferences first'}
+            title={hasJobTitles ? undefined : 'Renseignez au moins un intitulé de poste dans les Préférences'}
             className="flex items-center gap-1.5 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
             {stage !== 'idle' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radar className="w-4 h-4" />}
@@ -148,13 +167,19 @@ const JobSearchPage: React.FC = () => {
           </button>
         </div>
 
+        {lastScrapeAt && (
+          <p className="text-xs text-slate-400 mb-4">
+            Dernier scrape {formatRelativeDate(lastScrapeAt)} · {candidates.length} offres
+          </p>
+        )}
+
         {!hasJobTitles && (
           <p className="text-sm text-slate-400 mb-4">
-            No job titles configured yet.{' '}
+            Aucun intitulé de poste configuré.{' '}
             <Link to="/preferences" className="text-indigo-600 hover:text-indigo-800 font-medium">
-              Set your search preferences
+              Renseignez vos préférences de recherche
             </Link>{' '}
-            to run a search.
+            pour lancer une recherche.
           </p>
         )}
 
@@ -170,19 +195,22 @@ const JobSearchPage: React.FC = () => {
 
         {error && <div className="text-amber-700 text-sm bg-amber-50 rounded-lg px-4 py-3 mb-4">{error}</div>}
 
-        <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5 w-fit mb-6">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              data-testid={`scraped-jobs-tab-${t}`}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                tab === t ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {TAB_LABELS[t]}
-            </button>
-          ))}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5 w-fit">
+            {TABS.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                data-testid={`scraped-jobs-tab-${t}`}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  tab === t ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {TAB_LABELS[t]} {tabCounts[t]}
+              </button>
+            ))}
+          </div>
+          <span className="text-xs text-slate-400">↑↓ Fit, puis récence</span>
         </div>
 
         {loading && (
@@ -194,12 +222,12 @@ const JobSearchPage: React.FC = () => {
         {!loading && visibleCandidates.length === 0 && (
           <div className="text-center py-16 text-slate-400">
             <Radar className="w-8 h-8 mx-auto mb-3 text-slate-300" />
-            <p className="text-slate-500 font-medium">No {TAB_LABELS[tab].toLowerCase()} jobs.</p>
+            <p className="text-slate-500 font-medium">Aucune offre {TAB_LABELS[tab].toLowerCase()}.</p>
           </div>
         )}
 
         {!loading && visibleCandidates.length > 0 && (
-          <ScrapedJobsTable candidates={visibleCandidates} onImport={openImport} onDismiss={(c) => dismissCandidate(c.id)} />
+          <ScrapedJobsList candidates={visibleCandidates} onImport={openImport} onDismiss={(c) => dismissCandidate(c.id)} />
         )}
       </div>
 

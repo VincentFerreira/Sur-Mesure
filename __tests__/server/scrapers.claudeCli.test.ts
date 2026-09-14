@@ -198,13 +198,54 @@ describe('qualifyAll (claudeCli)', () => {
         expect(mockExecFile).not.toHaveBeenCalled();
     });
 
-    it('invokes claude with no tools loaded and maps ids to fit', async () => {
-        mockExecFile.mockResolvedValue({ stdout: cliJsonResult(JSON.stringify({ results: [{ id: '1', fit: 'high' }] })) });
+    it('invokes claude with no tools loaded and maps ids to fit/score/signals', async () => {
+        mockExecFile.mockResolvedValue({
+            stdout: cliJsonResult(
+                JSON.stringify({ results: [{ id: '1', score: 92, signals: [{ label: 'Playwright', polarity: 'positive' }] }] })
+            ),
+        });
         const result = await qualifyAll([{ id: '1', title: 'QA Engineer', company: 'Acme' }], ['QA Engineer'], [], undefined);
-        expect(result).toEqual({ '1': 'high' });
+        expect(result).toEqual({ '1': { fit: 'high', score: 92, signals: [{ label: 'Playwright', polarity: 'positive' }] } });
         const [, args] = mockExecFile.mock.calls[0];
         const toolsIndex = args.indexOf('--tools');
         expect(args[toolsIndex + 1]).toBe('');
+    });
+
+    it('includes an ACCEPTABLE WORK MODES section in the prompt when work modes are given', async () => {
+        mockExecFile.mockResolvedValue({ stdout: cliJsonResult(JSON.stringify({ results: [{ id: '1', score: 80, signals: [] }] })) });
+        await qualifyAll([{ id: '1', title: 'QA Engineer', company: 'Acme' }], ['QA Engineer'], [], undefined, ['hybrid', 'remote']);
+        const [, args] = mockExecFile.mock.calls[0];
+        const prompt = args[1];
+        expect(prompt).toContain('== ACCEPTABLE WORK MODES ==\nhybrid\nremote');
+    });
+
+    it('omits the work modes section when none are given', async () => {
+        mockExecFile.mockResolvedValue({ stdout: cliJsonResult(JSON.stringify({ results: [{ id: '1', score: 80, signals: [] }] })) });
+        await qualifyAll([{ id: '1', title: 'QA Engineer', company: 'Acme' }], ['QA Engineer'], [], undefined);
+        const [, args] = mockExecFile.mock.calls[0];
+        expect(args[1]).not.toContain('ACCEPTABLE WORK MODES');
+    });
+
+    it('clamps an out-of-range score and drops malformed signals', async () => {
+        mockExecFile.mockResolvedValue({
+            stdout: cliJsonResult(
+                JSON.stringify({
+                    results: [
+                        {
+                            id: '1',
+                            score: 142.6,
+                            signals: [
+                                { label: 'Nantes', polarity: 'neutral' },
+                                { label: '', polarity: 'positive' }, // dropped: empty label
+                                { label: 'Bogus', polarity: 'sideways' }, // dropped: invalid polarity
+                            ],
+                        },
+                    ],
+                })
+            ),
+        });
+        const result = await qualifyAll([{ id: '1', title: 'QA Engineer', company: 'Acme' }], ['QA Engineer'], [], undefined);
+        expect(result['1']).toEqual({ fit: 'high', score: 100, signals: [{ label: 'Nantes', polarity: 'neutral' }] });
     });
 
     // Found via live testing: on a large run (many candidates -> many batches), one
@@ -217,13 +258,13 @@ describe('qualifyAll (claudeCli)', () => {
         const batch2 = Array.from({ length: 5 }, (_, i) => ({ id: `b${i}`, title: 'QA Engineer', company: 'Acme' }));
 
         mockExecFile
-            .mockResolvedValueOnce({ stdout: cliJsonResult(JSON.stringify({ results: batch1.map((c) => ({ id: c.id, fit: 'high' })) })) })
+            .mockResolvedValueOnce({ stdout: cliJsonResult(JSON.stringify({ results: batch1.map((c) => ({ id: c.id, score: 90, signals: [] })) })) })
             .mockRejectedValueOnce(new Error('claude CLI timed out'));
 
         const result = await qualifyAll([...batch1, ...batch2], ['QA Engineer'], [], undefined);
 
         expect(mockExecFile).toHaveBeenCalledTimes(2);
-        for (const c of batch1) expect(result[c.id]).toBe('high');
+        for (const c of batch1) expect(result[c.id].fit).toBe('high');
         for (const c of batch2) expect(result[c.id]).toBeUndefined();
     });
 });

@@ -1,12 +1,13 @@
 import { create } from 'zustand';
-import { ScrapedJob, ScrapedJobFit, ScrapedJobStatus } from '../types';
+import { ScrapedJob, ScrapedJobStatus } from '../types';
 import {
   dismissScrapedJob as dismissScrapedJobRequest,
   listScrapedJobs,
   markScrapedJobImported as markScrapedJobImportedRequest,
   deleteScrapedJob as deleteScrapedJobRequest,
   runScrape as runScrapeRequest,
-  setScrapedJobFit as setScrapedJobFitRequest,
+  setScrapedJobQualification as setScrapedJobQualificationRequest,
+  QualifyResult,
   RunScrapeResult,
 } from '../services/scraperService';
 import { ApiError } from '../services/apiClient';
@@ -21,7 +22,7 @@ interface ScraperState {
   runScrape: (jobTitles?: string[]) => Promise<RunScrapeResult>;
   dismissCandidate: (id: string) => Promise<ScrapedJob>;
   importCandidate: (id: string, jobId: string) => Promise<ScrapedJob>;
-  setCandidateFit: (id: string, fit: ScrapedJobFit) => Promise<ScrapedJob>;
+  setCandidateQualification: (id: string, qualification: QualifyResult) => Promise<ScrapedJob>;
   removeCandidate: (id: string) => Promise<void>;
 }
 
@@ -76,9 +77,10 @@ export const useScraperStore = create<ScraperState>((set, get) => ({
   },
 
   // Applies the AI qualification pass's verdict for one candidate — 'low' fit also
-  // dismisses it in the same request (see setScrapedJobFit in scraperService.ts).
-  setCandidateFit: async (id, fit) => {
-    const updated = await setScrapedJobFitRequest(id, fit);
+  // dismisses it in the same request (see setScrapedJobQualification in
+  // scraperService.ts).
+  setCandidateQualification: async (id, qualification) => {
+    const updated = await setScrapedJobQualificationRequest(id, qualification);
     set({ candidates: get().candidates.map((c) => (c.id === id ? updated : c)) });
     return updated;
   },

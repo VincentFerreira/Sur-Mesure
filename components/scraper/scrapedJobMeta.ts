@@ -1,10 +1,6 @@
-import { ScrapedJobStatus } from '../../types';
-
-export const SCRAPED_JOB_STATUS_META: Record<ScrapedJobStatus, { label: string; className: string }> = {
-  new: { label: 'New', className: 'bg-sky-50 text-sky-700' },
-  dismissed: { label: 'Dismissed', className: 'bg-slate-100 text-slate-400' },
-  imported: { label: 'Imported', className: 'bg-green-50 text-green-700' },
-};
+import { formatDistanceToNow } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import { ScrapedJobFit } from '../../types';
 
 export const PORTAL_LABELS: Record<string, string> = {
   france_travail: 'France Travail',
@@ -14,10 +10,26 @@ export const PORTAL_LABELS: Record<string, string> = {
   fake: 'Fake (test)',
 };
 
-export const SCRAPED_JOB_FIT_META: Record<'high' | 'medium' | 'low', { label: string; className: string }> = {
-  high: { label: 'High fit', className: 'bg-emerald-50 text-emerald-700' },
-  medium: { label: 'Medium fit', className: 'bg-amber-50 text-amber-700' },
-  low: { label: 'Low fit', className: 'bg-slate-100 text-slate-400' },
+export const portalLabel = (portal: string): string => PORTAL_LABELS[portal] ?? portal;
+
+// Tier labels for the grouped discoveries list — user-facing, hence French, matching
+// the rest of this app's UI copy.
+export const FIT_GROUP_LABELS: Record<ScrapedJobFit, string> = {
+  high: 'Fort',
+  medium: 'Moyen',
+  low: 'Faible',
 };
 
-export const portalLabel = (portal: string): string => PORTAL_LABELS[portal] ?? portal;
+// Best fit first; a synthetic "unqualified" bucket (candidates with no score yet —
+// qualification pass never ran or failed for them) is appended last by the caller.
+export const FIT_GROUP_ORDER: ScrapedJobFit[] = ['high', 'medium', 'low'];
+export const UNQUALIFIED_GROUP_LABEL = 'Non évalué';
+
+// "il y a 8 mois" — used both by the discoveries list itself and by JobSearchPage's
+// "last scrape" subheading. Returns '—' for a missing/invalid date rather than throwing.
+export function formatRelativeDate(iso?: string): string {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return formatDistanceToNow(date, { addSuffix: true, locale: fr });
+}

@@ -59,6 +59,12 @@ describe('POST /api/scraper/run', () => {
     expect(candidate).toHaveProperty('id');
     expect(candidate).toHaveProperty('dedupeKey');
     expect(candidate.status).toBe('new');
+    // Ingest-time normalization (server/scraperNormalize.js) wiring: fake.js's search()
+    // always returns a well-formed title/company, so this only checks the fields exist
+    // with the right types — the actual title-case/department/fallback behavior under
+    // input is covered by __tests__/server/scraperNormalize.test.ts.
+    expect(typeof candidate.isRemote).toBe('boolean');
+    expect(candidate.company.length).toBeGreaterThan(0);
     candidateIdsToClean.push(...res.body.created.map((c: { id: string }) => c.id));
   });
 
@@ -98,18 +104,41 @@ describe('POST /api/scraper/expand-keywords', () => {
 });
 
 describe('POST /api/scraper/qualify', () => {
-  it('returns an empty fitMap when there are no candidates or job titles', async () => {
+  it('returns an empty results map when there are no candidates or job titles', async () => {
     const res = await request(app).post('/api/scraper/qualify').send({ candidates: [], jobTitles: ['QA Engineer'] });
     expect(res.status).toBe(200);
-    expect(res.body.fitMap).toEqual({});
+    expect(res.body.results).toEqual({});
   });
 
-  it('judges candidate fit via the fake AI stand-in (NODE_ENV=test)', async () => {
+  it('judges candidate fit/score/signals via the fake AI stand-in (NODE_ENV=test)', async () => {
     const res = await request(app)
       .post('/api/scraper/qualify')
       .send({ candidates: [{ id: '1', title: 'Senior QA Engineer', company: 'Acme' }], jobTitles: ['QA Engineer'] });
     expect(res.status).toBe(200);
-    expect(res.body.fitMap['1']).toBe('high');
+    expect(res.body.results['1'].fit).toBe('high');
+    expect(typeof res.body.results['1'].score).toBe('number');
+    expect(Array.isArray(res.body.results['1'].signals)).toBe(true);
+  });
+
+  it('downgrades and tags a candidate whose work mode is incompatible with the configured preferences', async () => {
+    const res = await request(app)
+      .post('/api/scraper/qualify')
+      .send({
+        candidates: [
+          {
+            id: '1',
+            title: 'Senior QA Engineer',
+            company: 'Acme',
+            location: 'Paris',
+            descriptionRaw: 'Poste 100% présentiel, aucun télétravail possible.',
+          },
+        ],
+        jobTitles: ['QA Engineer'],
+        workModes: ['hybrid', 'remote'],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.results['1'].fit).toBe('medium');
+    expect(res.body.results['1'].signals).toContainEqual({ label: 'Sur site non souhaité', polarity: 'negative' });
   });
 });
 
@@ -173,6 +202,31 @@ describe('PATCH /api/scraper/candidates/:id', () => {
     const res = await request(app).patch(`/api/scraper/candidates/${candidate.id}`).send({ fit: 'high' });
     expect(res.status).toBe(200);
     expect(res.body.fit).toBe('high');
+  });
+
+  it('stores fit, score and signals together and rejects an invalid score or signals', async () => {
+    await request(app).put('/api/preferences').send({ jobTitles: ['Platform Engineer'], locations: [] });
+    const run = await request(app).post('/api/scraper/run');
+    const candidate = run.body.created[0];
+    candidateIdsToClean.push(candidate.id);
+
+    const invalidScore = await request(app).patch(`/api/scraper/candidates/${candidate.id}`).send({ score: 150 });
+    expect(invalidScore.status).toBe(400);
+    expect(invalidScore.body.error).toHaveProperty('code', 'invalid_score');
+
+    const invalidSignals = await request(app)
+      .patch(`/api/scraper/candidates/${candidate.id}`)
+      .send({ signals: [{ label: 'x', polarity: 'bogus' }] });
+    expect(invalidSignals.status).toBe(400);
+    expect(invalidSignals.body.error).toHaveProperty('code', 'invalid_signals');
+
+    const res = await request(app)
+      .patch(`/api/scraper/candidates/${candidate.id}`)
+      .send({ fit: 'high', score: 90, signals: [{ label: 'Playwright', polarity: 'positive' }] });
+    expect(res.status).toBe(200);
+    expect(res.body.fit).toBe('high');
+    expect(res.body.score).toBe(90);
+    expect(res.body.signals).toEqual([{ label: 'Playwright', polarity: 'positive' }]);
   });
 });
 

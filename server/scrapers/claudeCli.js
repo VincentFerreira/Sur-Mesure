@@ -10,6 +10,7 @@
 //   here so the whole job-search pipeline rides on the one CLI mechanism.
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { fitFromScore } from './scraperFit.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -191,21 +192,26 @@ export async function expandKeywords(jobTitles) {
 // When the candidate's own CV is provided (see cvText below), CV-to-posting fit
 // becomes the primary signal — title/location match alone isn't enough if the
 // posting's actual requirements are a poor match for the candidate's background.
-const QUALIFY_PROMPT_BASE = `You are screening scraped job postings against what a job seeker actually wants. For each candidate below, judge how well it matches the target job titles and, when a list of acceptable locations is given, whether its location is compatible — treat any "Remote"/"Remote France"-style target as satisfied by any remote-friendly posting.
-- "high": clearly the same kind of role, in an acceptable location (or no location constraint given)
-- "medium": plausibly relevant/adjacent role, unclear location info, or a matching role in a location that's a stretch but not clearly wrong
-- "low": off-topic job family, or a genuinely wrong location for an otherwise on-site role
+const QUALIFY_PROMPT_BASE = `You are screening scraped job postings against what a job seeker actually wants. For each candidate below, give it a fit score from 0 to 100 (100 = perfect match) based on how well it matches the target job titles and, when a list of acceptable locations is given, whether its location is compatible — treat any "Remote"/"Remote France"-style target as satisfied by any remote-friendly posting.
 
-Return ONLY valid JSON, no markdown: {"results": [{"id": string, "fit": "high"|"medium"|"low"}]} — exactly one entry per candidate id listed, in any order.`;
+When a list of acceptable work modes (onsite/hybrid/remote) is given, also judge whether the posting's actual work arrangement — inferred from its location and description text — is compatible. Only judge this when the text gives a clear signal (an explicit "on-site only"/"présentiel"/"no remote" statement for onsite, "hybrid"/"hybride"/"X days remote" for hybrid, "full remote"/"100% remote"/"télétravail total" for remote) — never guess from silence. A clearly incompatible work mode (e.g. the posting is on-site only but "onsite" isn't in the acceptable list) counts against the score the same way an incompatible location does, and must produce its own negative signal naming the mismatch (e.g. {"label": "Sur site uniquement", "polarity": "negative"}).
+- 90-100: clearly the same kind of role, in an acceptable location and work mode (or no such constraint given), with strong signals in the description
+- 45-89: plausibly relevant/adjacent role, or a matching role in a location/work-mode that's a stretch but not clearly wrong, or missing information that would confirm a strong match
+- 0-44: off-topic job family, or a genuinely wrong location or work mode for the role
+
+Also return 2-4 short "signals" per candidate: brief (1-3 word) tags explaining the score, each tagged "positive" (a concrete reason it's a good match — a matched skill/keyword, seniority match, remote/location/work-mode match), "negative" (a concrete concern — missing eval/unclear seniority, undesirable structure like "ESN"/"régie", stale posting, incompatible work mode), or "neutral" (a factual note that's neither, e.g. a city name). Never invent a signal not supported by the posting text given.
+
+Return ONLY valid JSON, no markdown: {"results": [{"id": string, "score": number, "signals": [{"label": string, "polarity": "positive"|"negative"|"neutral"}]}]} — exactly one entry per candidate id listed, in any order.`;
 
 const QUALIFY_PROMPT_WITH_CV_ADDENDUM = `
 
 The job seeker's own CV is provided below. Use it as the primary signal: judge how well their actual skills and experience match each posting's stated requirements, not just whether the title/location line up.
-- "high" now additionally requires a strong match between the CV and the posting's requirements
-- "medium": a role/location match but only a partial or unclear fit with the CV, or vice versa
-- "low" now also covers a posting whose core requirements the CV clearly doesn't meet, even if the title matches`;
+- A high score (90-100) now additionally requires a strong match between the CV and the posting's requirements
+- A mid score (45-89) means a role/location match but only a partial or unclear fit with the CV, or vice versa
+- A low score (0-44) now also covers a posting whose core requirements the CV clearly doesn't meet, even if the title matches
+Include a signal reflecting the CV match specifically (e.g. {"label": "CV aligné", "polarity": "positive"} or {"label": "Écart CV", "polarity": "negative"}).`;
 
-function buildQualifyPrompt(jobTitles, locations, cvText, batch) {
+function buildQualifyPrompt(jobTitles, locations, cvText, workModes, batch) {
     const candidatesText = batch
         .map(
             (c) =>
@@ -213,41 +219,50 @@ function buildQualifyPrompt(jobTitles, locations, cvText, batch) {
         )
         .join('\n');
     const locationsSection = locations.length > 0 ? `\n\n== ACCEPTABLE LOCATIONS ==\n${locations.join('\n')}` : '';
+    const workModesSection = workModes.length > 0 ? `\n\n== ACCEPTABLE WORK MODES ==\n${workModes.join('\n')}` : '';
     const cvSection = cvText ? `\n\n== CANDIDATE'S CV ==\n${cvText}` : '';
     const prompt = cvText ? QUALIFY_PROMPT_BASE + QUALIFY_PROMPT_WITH_CV_ADDENDUM : QUALIFY_PROMPT_BASE;
-    return `${prompt}\n\n== TARGET JOB TITLES ==\n${jobTitles.join('\n')}${locationsSection}${cvSection}\n\n== CANDIDATES ==\n${candidatesText}`;
+    return `${prompt}\n\n== TARGET JOB TITLES ==\n${jobTitles.join('\n')}${locationsSection}${workModesSection}${cvSection}\n\n== CANDIDATES ==\n${candidatesText}`;
 }
 
-/** @returns {Record<string, string>} */
-function toFitMap(results) {
-    /** @type {Record<string, string>} */
+const MAX_SIGNALS = 4;
+const MAX_SIGNAL_LABEL_LENGTH = 40;
+
+/** @returns {Record<string, {fit: string, score: number, signals: {label: string, polarity: string}[]}>} */
+function toQualifyMap(results) {
     const map = {};
     if (!Array.isArray(results)) return map;
     for (const r of results) {
-        if (r && typeof r.id === 'string' && ['high', 'medium', 'low'].includes(r.fit)) {
-            map[r.id] = r.fit;
-        }
+        if (!r || typeof r.id !== 'string' || typeof r.score !== 'number' || Number.isNaN(r.score)) continue;
+        const score = Math.max(0, Math.min(100, Math.round(r.score)));
+        const signals = Array.isArray(r.signals)
+            ? r.signals
+                  .filter((s) => s && typeof s.label === 'string' && s.label.trim() && ['positive', 'negative', 'neutral'].includes(s.polarity))
+                  .slice(0, MAX_SIGNALS)
+                  .map((s) => ({ label: s.label.trim().slice(0, MAX_SIGNAL_LABEL_LENGTH), polarity: s.polarity }))
+            : [];
+        map[r.id] = { fit: fitFromScore(score), score, signals };
     }
     return map;
 }
 
-async function qualifyBatch(jobTitles, locations, cvText, batch) {
-    const text = await runClaude(buildQualifyPrompt(jobTitles, locations, cvText, batch), '');
+async function qualifyBatch(jobTitles, locations, cvText, workModes, batch) {
+    const text = await runClaude(buildQualifyPrompt(jobTitles, locations, cvText, workModes, batch), '');
     let parsed;
     try {
         parsed = JSON.parse(stripCodeFence(text));
     } catch {
         return {};
     }
-    return toFitMap(parsed.results);
+    return toQualifyMap(parsed.results);
 }
 
-// Judges each candidate against `jobTitles`/`locations` (pass the user's *original*
-// configured preferences, not an AI-expanded keyword list — see expandKeywords
-// above), and optionally against the job seeker's own CV (`cvText` — the client
-// serializes it once via services/aiService.ts's serializeCVForATS and sends the
-// resulting text) for a genuine CV-to-posting fit judgment instead of title/location
-// keyword matching alone.
+// Judges each candidate against `jobTitles`/`locations`/`workModes` (pass the user's
+// *original* configured preferences, not an AI-expanded keyword list — see
+// expandKeywords above), and optionally against the job seeker's own CV (`cvText` —
+// the client serializes it once via services/aiService.ts's serializeCVForATS and
+// sends the resulting text) for a genuine CV-to-posting fit judgment instead of
+// title/location/work-mode keyword matching alone.
 //
 // Processes in batches so each prompt/response stays a reasonable size regardless of
 // how many candidates a scrape run returned. Each batch is an independent CLI call —
@@ -255,8 +270,8 @@ async function qualifyBatch(jobTitles, locations, cvText, batch) {
 // already-computed results, so failures are caught and logged per batch rather than
 // aborting the whole pass (mirrors the per-portal isolation in this module's
 // runScrape orchestrator).
-/** @returns {Promise<Record<string, string>>} */
-export async function qualifyAll(candidates, jobTitles, locations, cvText) {
+/** @returns {Promise<Record<string, {fit: string, score: number, signals: {label: string, polarity: string}[]}>>} */
+export async function qualifyAll(candidates, jobTitles, locations, cvText, workModes = []) {
     if (!candidates || candidates.length === 0 || !jobTitles || jobTitles.length === 0) return {};
 
     const batches = [];
@@ -264,14 +279,13 @@ export async function qualifyAll(candidates, jobTitles, locations, cvText) {
         batches.push(candidates.slice(i, i + QUALIFY_BATCH_SIZE));
     }
 
-    /** @type {Record<string, string>} */
-    const fitMap = {};
+    const qualifyMap = {};
     for (const batch of batches) {
         try {
-            Object.assign(fitMap, await qualifyBatch(jobTitles, locations, cvText, batch));
+            Object.assign(qualifyMap, await qualifyBatch(jobTitles, locations, cvText, workModes, batch));
         } catch (err) {
             console.error(`Qualification batch failed via claude CLI (${batch.length} candidates left unfiltered):`, err);
         }
     }
-    return fitMap;
+    return qualifyMap;
 }
