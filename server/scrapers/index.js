@@ -4,6 +4,16 @@ import * as freehire from './freehire.js';
 import * as claudeCli from './claudeCli.js';
 import * as fake from './fake.js';
 
+// SCRAPER_PROVIDER=fake means "go fully synthetic, no real network/CLI calls" — the
+// same flag routes.scraper.js's useFakeAi() already uses to fake the expand-keywords/
+// qualify AI steps. Real portals must respect it too: previously only the Vitest
+// suite's NODE_ENV=test check disabled them, so a `SCRAPER_PROVIDER=fake` e2e run
+// (Playwright's own webServer sets exactly this) would still dispatch real HTTP calls
+// to France Travail/Arbeitnow/Freehire and a real `claude` CLI subprocess — surfaced by
+// the first e2e test to actually click "Lancer un scrape" (POST /run was never
+// exercised by e2e before that).
+const useFakePortals = () => process.env.NODE_ENV === 'test' || process.env.SCRAPER_PROVIDER === 'fake';
+
 // Registry of portal modules. Each exports `id` and `async search({ query, location })`.
 // `usesLocation: false` means the portal ignores `location` entirely (e.g.
 // france_travail — see the comment in franceTravail.js) — such a portal is called
@@ -11,21 +21,17 @@ import * as fake from './fake.js';
 // redundant, identical requests (which risks tripping its rate limit for no benefit;
 // this is what caused an intermittent "Unexpected end of JSON input" mid-run before
 // this was added). Defaults to true when omitted.
-// The `fake` portal is only enabled when explicitly requested (tests/e2e), never in a
-// real run, so it can never mask a misconfigured real portal.
-// - `arbeitnow` and `freehire` are genuinely zero-config (no key/registration) and
-//   enabled by default, except under the Vitest suite (NODE_ENV=test) — unlike the
-//   `fake` portal below, they aren't gated behind an explicit opt-in flag, so they
-//   must not make real network calls during `npm run test`. Never disabled for the
-//   real dev server or e2e (e2e never exercises `POST /run` — see
-//   tests/e2e/job-search.spec.ts).
-// - `france_travail` needs real credentials; until configured it just fails per-portal
-//   (caught in runScrape below) rather than blocking the others.
+// - `france_travail`/`arbeitnow`/`freehire` are all disabled under useFakePortals() —
+//   real network calls have no place in a synthetic run. `france_travail` also needs
+//   real credentials; until configured it just fails per-portal in a real run (caught
+//   in runScrape below) rather than blocking the others.
+// - The `fake` portal itself is only added when explicitly requested, never in a real
+//   run, so it can never mask a misconfigured real portal.
 function buildRegistry() {
     const portals = [
-        { id: franceTravail.id, enabled: true, usesLocation: false, search: franceTravail.search },
-        { id: arbeitnow.id, enabled: process.env.NODE_ENV !== 'test', usesLocation: true, search: arbeitnow.search },
-        { id: freehire.id, enabled: process.env.NODE_ENV !== 'test', usesLocation: false, search: freehire.search },
+        { id: franceTravail.id, enabled: !useFakePortals(), usesLocation: false, search: franceTravail.search },
+        { id: arbeitnow.id, enabled: !useFakePortals(), usesLocation: true, search: arbeitnow.search },
+        { id: freehire.id, enabled: !useFakePortals(), usesLocation: false, search: freehire.search },
     ];
     if (process.env.SCRAPER_PROVIDER === 'fake') {
         portals.push({ id: fake.id, enabled: true, usesLocation: true, search: fake.search });
@@ -36,11 +42,10 @@ function buildRegistry() {
 // Single-shot portals: called once per scrape run with the full jobTitles/locations
 // arrays, not once per (query, location) pair like the portals above — invoking the
 // `claude` CLI is its own multi-second-to-minutes subprocess, so looping it per query
-// would be needlessly slow. `claude_cli` is disabled under the Vitest suite for the
-// same reason arbeitnow is (never make real calls during `npm run test`); it is never
-// disabled for the real dev server or e2e (e2e never exercises `POST /run`).
+// would be needlessly slow. Disabled under useFakePortals() for the same reason as the
+// portals above — a synthetic run must never spawn a real CLI subprocess.
 function buildSingleShotRegistry() {
-    return [{ id: claudeCli.id, enabled: process.env.NODE_ENV !== 'test', run: claudeCli.searchAll }];
+    return [{ id: claudeCli.id, enabled: !useFakePortals(), run: claudeCli.searchAll }];
 }
 
 // Runs every enabled portal once per (jobTitle, location) pair — or once per jobTitle

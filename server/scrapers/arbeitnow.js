@@ -47,6 +47,10 @@ export function normalize(job) {
         url: job.url,
         postedDate: job.created_at ? new Date(job.created_at * 1000).toISOString().slice(0, 10) : undefined,
         descriptionRaw: stripHtml(job.description),
+        // Arbeitnow's own stable per-posting slug (used in their own job URLs) — lets
+        // scraperFingerprint.js build a precise portal:externalId identity instead of
+        // falling back to a company+title+department hash.
+        externalId: job.slug,
     };
 }
 

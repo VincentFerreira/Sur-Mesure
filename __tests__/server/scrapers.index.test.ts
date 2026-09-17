@@ -28,14 +28,24 @@ beforeEach(() => {
 // traced back to before `usesLocation` was added).
 describe('runScrape — usesLocation', () => {
     it('calls a location-agnostic portal once per query, ignoring the location list entirely', async () => {
-        await (runScrape as (input: { jobTitles: string[]; locations: string[] }) => Promise<unknown>)({
-            jobTitles: ['QA Engineer', 'SDET'],
-            locations: ['Paris', 'Nantes', 'Remote France'],
-        });
+        // Every real portal (including france_travail) is disabled by
+        // buildRegistry()'s useFakePortals() whenever NODE_ENV==='test' (to keep them
+        // offline during `npm run test`) — irrelevant here since it's mocked above, so
+        // it's safe to flip for just this assertion.
+        const originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'development';
+        try {
+            await (runScrape as (input: { jobTitles: string[]; locations: string[] }) => Promise<unknown>)({
+                jobTitles: ['QA Engineer', 'SDET'],
+                locations: ['Paris', 'Nantes', 'Remote France'],
+            });
 
-        expect(franceTravailSearch).toHaveBeenCalledTimes(2);
-        expect(franceTravailSearch).toHaveBeenCalledWith({ query: 'QA Engineer', location: undefined });
-        expect(franceTravailSearch).toHaveBeenCalledWith({ query: 'SDET', location: undefined });
+            expect(franceTravailSearch).toHaveBeenCalledTimes(2);
+            expect(franceTravailSearch).toHaveBeenCalledWith({ query: 'QA Engineer', location: undefined });
+            expect(franceTravailSearch).toHaveBeenCalledWith({ query: 'SDET', location: undefined });
+        } finally {
+            process.env.NODE_ENV = originalNodeEnv;
+        }
     });
 
     it('still calls a location-aware portal once per (query, location) pair', async () => {

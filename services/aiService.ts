@@ -1,7 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
-import { CVData, ATSAnalysisResult, ATSKeyword, JobWorkMode, JobContractType } from "../types";
+import { CVData, ATSAnalysisResult, ATSKeyword, JobWorkMode, JobContractType, AiCallOperation, AiCallProvider, AiCallStatus } from "../types";
 import { getLangText, getLangArray, LANGUAGE_CODES } from '../lib/i18n';
+import { logAiCall } from './observabilityService';
 
 // Types pour le provider IA
 export type AIProvider = 'gemini' | 'claude' | 'fake';
@@ -38,6 +39,39 @@ const parseAiJson = (text: string, context: string, wasTruncated: boolean = true
         );
     }
 };
+
+// Logs one row per actual network attempt to the Observability page (fire-and-forget,
+// see services/observabilityService.ts) — a retried call (Gemini RECITATION, Claude
+// max_tokens) produces two rows, which correctly reflects two real calls having been
+// made, not one. `status: 'error'` covers both a network/SDK-level failure and a
+// response that came back but couldn't be turned into usable data (empty text,
+// unparsable JSON) — from the observability page's perspective, both mean the call
+// didn't deliver.
+function recordAiCall(params: {
+    provider: AiCallProvider;
+    operation: AiCallOperation;
+    model?: string;
+    startedAt: number;
+    status: AiCallStatus;
+    errorMessage?: string;
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+    finishReason?: string;
+}): void {
+    logAiCall({
+        provider: params.provider,
+        operation: params.operation,
+        model: params.model,
+        durationMs: Date.now() - params.startedAt,
+        status: params.status,
+        errorMessage: params.errorMessage,
+        promptTokens: params.promptTokens,
+        completionTokens: params.completionTokens,
+        totalTokens: params.totalTokens,
+        finishReason: params.finishReason,
+    });
+}
 
 // Prompt partagé pour l'extraction de CV
 const RESUME_PARSER_PROMPT = `You are an expert resume parser. Extract information from the PDF resume into the JSON structure below.
@@ -161,7 +195,9 @@ const geminiMaxOutputTokens = (): number => {
 const parseWithGemini = async (pdfBase64: string): Promise<any> => {
     const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, "");
     const model = await getBestGeminiModel();
+    const startedAt = Date.now();
 
+    try {
     const response = await geminiAi.models.generateContent({
         model,
         contents: {
@@ -246,13 +282,26 @@ const parseWithGemini = async (pdfBase64: string): Promise<any> => {
     });
 
     if (!response.text) throw new Error('Empty response from Gemini');
-    return parseAiJson(response.text, 'resume parsing');
+    const result = parseAiJson(response.text, 'resume parsing');
+    recordAiCall({
+        provider: 'gemini', operation: 'parse_cv', model, startedAt, status: 'success',
+        promptTokens: response.usageMetadata?.promptTokenCount,
+        completionTokens: response.usageMetadata?.candidatesTokenCount,
+        totalTokens: response.usageMetadata?.totalTokenCount,
+    });
+    return result;
+    } catch (err) {
+        recordAiCall({ provider: 'gemini', operation: 'parse_cv', model, startedAt, status: 'error', errorMessage: err instanceof Error ? err.message : String(err) });
+        throw err;
+    }
 };
 
 // Parse avec Claude
 const parseWithClaude = async (pdfBase64: string): Promise<any> => {
     const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, "");
+    const startedAt = Date.now();
 
+    try {
     const response = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 8000,
@@ -291,7 +340,19 @@ const parseWithClaude = async (pdfBase64: string): Promise<any> => {
         jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
     }
 
-    return parseAiJson(jsonText, 'resume parsing');
+    const result = parseAiJson(jsonText, 'resume parsing');
+    recordAiCall({
+        provider: 'claude', operation: 'parse_cv', model: 'claude-sonnet-4-6', startedAt, status: 'success',
+        promptTokens: response.usage?.input_tokens,
+        completionTokens: response.usage?.output_tokens,
+        totalTokens: response.usage ? response.usage.input_tokens + response.usage.output_tokens : undefined,
+        finishReason: response.stop_reason ?? undefined,
+    });
+    return result;
+    } catch (err) {
+        recordAiCall({ provider: 'claude', operation: 'parse_cv', model: 'claude-sonnet-4-6', startedAt, status: 'error', errorMessage: err instanceof Error ? err.message : String(err) });
+        throw err;
+    }
 };
 
 const TIMEOUT_MS = 90_000;
@@ -473,20 +534,34 @@ const analyzeWithGemini = async (cvText: string, jobDescription: string): Promis
     const basePrompt = `${ATS_ANALYZER_PROMPT}\n\n== CV CONTENT ==\n${cvText}\n\n== JOB DESCRIPTION ==\n${jobDescription}`;
     const maxOutputTokens = geminiMaxOutputTokens();
 
+    // Logs one row per attempt (see recordAiCall) — a RECITATION-triggered retry below
+    // is two real calls, so it must produce two rows, not one.
     const callGemini = async (promptText: string) => {
-        const response = await geminiAi.models.generateContent({
-            model,
-            contents: { parts: [{ text: promptText }] },
-            config: {
-                responseMimeType: "application/json",
-                thinkingConfig: thinkingConfigFor(model),
-                maxOutputTokens,
-                responseSchema: ATS_RESPONSE_SCHEMA
-            }
-        });
-        const finishReason = response.candidates?.[0]?.finishReason;
-        console.log('[Gemini ATS]', { model, maxOutputTokens, finishReason, usage: response.usageMetadata });
-        return { text: response.text, finishReason };
+        const startedAt = Date.now();
+        try {
+            const response = await geminiAi.models.generateContent({
+                model,
+                contents: { parts: [{ text: promptText }] },
+                config: {
+                    responseMimeType: "application/json",
+                    thinkingConfig: thinkingConfigFor(model),
+                    maxOutputTokens,
+                    responseSchema: ATS_RESPONSE_SCHEMA
+                }
+            });
+            const finishReason = response.candidates?.[0]?.finishReason;
+            console.log('[Gemini ATS]', { model, maxOutputTokens, finishReason, usage: response.usageMetadata });
+            recordAiCall({
+                provider: 'gemini', operation: 'analyze_ats', model, startedAt, status: 'success', finishReason,
+                promptTokens: response.usageMetadata?.promptTokenCount,
+                completionTokens: response.usageMetadata?.candidatesTokenCount,
+                totalTokens: response.usageMetadata?.totalTokenCount,
+            });
+            return { text: response.text, finishReason };
+        } catch (err) {
+            recordAiCall({ provider: 'gemini', operation: 'analyze_ats', model, startedAt, status: 'error', errorMessage: err instanceof Error ? err.message : String(err) });
+            throw err;
+        }
     };
 
     let { text, finishReason } = await callGemini(basePrompt);
@@ -510,26 +585,40 @@ const analyzeWithGemini = async (cvText: string, jobDescription: string): Promis
 const analyzeWithClaude = async (cvText: string, jobDescription: string): Promise<any> => {
     const prompt = `${ATS_ANALYZER_PROMPT}\n\n== CV CONTENT ==\n${cvText}\n\n== JOB DESCRIPTION ==\n${jobDescription}`;
 
+    // Logs one row per attempt — a max_tokens-triggered retry below is two real calls.
     const callClaude = async (maxTokens: number) => {
-        const response = await anthropic.messages.create({
-            model: "claude-sonnet-4-6",
-            max_tokens: maxTokens,
-            messages: [{ role: "user", content: prompt }]
-        });
+        const startedAt = Date.now();
+        try {
+            const response = await anthropic.messages.create({
+                model: "claude-sonnet-4-6",
+                max_tokens: maxTokens,
+                messages: [{ role: "user", content: prompt }]
+            });
 
-        const textContent = response.content.find(c => c.type === 'text');
-        if (!textContent || textContent.type !== 'text') {
-            throw new Error('No text response from Claude');
+            const textContent = response.content.find(c => c.type === 'text');
+            if (!textContent || textContent.type !== 'text') {
+                throw new Error('No text response from Claude');
+            }
+
+            let jsonText = textContent.text.trim();
+            if (jsonText.startsWith('```json')) {
+                jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+            } else if (jsonText.startsWith('```')) {
+                jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+            }
+
+            recordAiCall({
+                provider: 'claude', operation: 'analyze_ats', model: 'claude-sonnet-4-6', startedAt, status: 'success',
+                finishReason: response.stop_reason ?? undefined,
+                promptTokens: response.usage?.input_tokens,
+                completionTokens: response.usage?.output_tokens,
+                totalTokens: response.usage ? response.usage.input_tokens + response.usage.output_tokens : undefined,
+            });
+            return { jsonText, truncated: response.stop_reason === 'max_tokens' };
+        } catch (err) {
+            recordAiCall({ provider: 'claude', operation: 'analyze_ats', model: 'claude-sonnet-4-6', startedAt, status: 'error', errorMessage: err instanceof Error ? err.message : String(err) });
+            throw err;
         }
-
-        let jsonText = textContent.text.trim();
-        if (jsonText.startsWith('```json')) {
-            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        } else if (jsonText.startsWith('```')) {
-            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
-        }
-
-        return { jsonText, truncated: response.stop_reason === 'max_tokens' };
     };
 
     let { jsonText, truncated } = await callClaude(ATS_CLAUDE_MAX_TOKENS);
@@ -600,7 +689,12 @@ export const analyzeATS = async (
     provider: AIProvider = 'gemini'
 ): Promise<ATSAnalysisResult> => {
     const cvText = serializeCVForATS(cvData);
-    if (provider === 'fake') return analyzeWithFake(cvText, jobDescription);
+    if (provider === 'fake') {
+        const startedAt = Date.now();
+        const result = analyzeWithFake(cvText, jobDescription);
+        recordAiCall({ provider: 'fake', operation: 'analyze_ats', model: 'fake-keyword-match-v1', startedAt, status: 'success' });
+        return result;
+    }
     return withTimeout(
         provider === 'claude'
             ? analyzeWithClaude(cvText, jobDescription)
@@ -702,47 +796,74 @@ Return ONLY valid JSON, no markdown, no code blocks. Exact schema:
 
 const extractJobWithGemini = async (rawText: string): Promise<any> => {
     const model = await getBestGeminiModel();
-    const response = await geminiAi.models.generateContent({
-        model,
-        contents: { parts: [{ text: `${JOB_EXTRACTOR_PROMPT}\n\n== JOB POSTING ==\n${rawText}` }] },
-        config: {
-            responseMimeType: "application/json",
-            thinkingConfig: thinkingConfigFor(model),
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    company: { type: Type.STRING },
-                    title: { type: Type.STRING },
-                    location: { type: Type.STRING },
-                    workMode: { type: Type.STRING },
-                    contractType: { type: Type.STRING },
-                    salaryRange: { type: Type.STRING },
-                    keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+    const startedAt = Date.now();
+    try {
+        const response = await geminiAi.models.generateContent({
+            model,
+            contents: { parts: [{ text: `${JOB_EXTRACTOR_PROMPT}\n\n== JOB POSTING ==\n${rawText}` }] },
+            config: {
+                responseMimeType: "application/json",
+                thinkingConfig: thinkingConfigFor(model),
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        company: { type: Type.STRING },
+                        title: { type: Type.STRING },
+                        location: { type: Type.STRING },
+                        workMode: { type: Type.STRING },
+                        contractType: { type: Type.STRING },
+                        salaryRange: { type: Type.STRING },
+                        keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    },
                 },
             },
-        },
-    });
-    if (!response.text) throw new Error('Empty response from Gemini');
-    return parseAiJson(response.text, 'job posting extraction');
+        });
+        if (!response.text) throw new Error('Empty response from Gemini');
+        const result = parseAiJson(response.text, 'job posting extraction');
+        recordAiCall({
+            provider: 'gemini', operation: 'extract_job', model, startedAt, status: 'success',
+            promptTokens: response.usageMetadata?.promptTokenCount,
+            completionTokens: response.usageMetadata?.candidatesTokenCount,
+            totalTokens: response.usageMetadata?.totalTokenCount,
+        });
+        return result;
+    } catch (err) {
+        recordAiCall({ provider: 'gemini', operation: 'extract_job', model, startedAt, status: 'error', errorMessage: err instanceof Error ? err.message : String(err) });
+        throw err;
+    }
 };
 
 const extractJobWithClaude = async (rawText: string): Promise<any> => {
-    const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: `${JOB_EXTRACTOR_PROMPT}\n\n== JOB POSTING ==\n${rawText}` }],
-    });
-    const textContent = response.content.find(c => c.type === 'text');
-    if (!textContent || textContent.type !== 'text') {
-        throw new Error('No text response from Claude');
+    const startedAt = Date.now();
+    try {
+        const response = await anthropic.messages.create({
+            model: "claude-sonnet-4-6",
+            max_tokens: 1000,
+            messages: [{ role: "user", content: `${JOB_EXTRACTOR_PROMPT}\n\n== JOB POSTING ==\n${rawText}` }],
+        });
+        const textContent = response.content.find(c => c.type === 'text');
+        if (!textContent || textContent.type !== 'text') {
+            throw new Error('No text response from Claude');
+        }
+        let jsonText = textContent.text.trim();
+        if (jsonText.startsWith('```json')) {
+            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (jsonText.startsWith('```')) {
+            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+        const result = parseAiJson(jsonText, 'job posting extraction');
+        recordAiCall({
+            provider: 'claude', operation: 'extract_job', model: 'claude-sonnet-4-6', startedAt, status: 'success',
+            promptTokens: response.usage?.input_tokens,
+            completionTokens: response.usage?.output_tokens,
+            totalTokens: response.usage ? response.usage.input_tokens + response.usage.output_tokens : undefined,
+            finishReason: response.stop_reason ?? undefined,
+        });
+        return result;
+    } catch (err) {
+        recordAiCall({ provider: 'claude', operation: 'extract_job', model: 'claude-sonnet-4-6', startedAt, status: 'error', errorMessage: err instanceof Error ? err.message : String(err) });
+        throw err;
     }
-    let jsonText = textContent.text.trim();
-    if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (jsonText.startsWith('```')) {
-        jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-    return parseAiJson(jsonText, 'job posting extraction');
 };
 
 const WORK_MODE_HINTS: [RegExp, JobWorkMode][] = [[/remote/i, 'remote'], [/hybrid/i, 'hybrid'], [/on-?site/i, 'onsite']];
@@ -774,7 +895,12 @@ export const extractJobFromText = async (
     rawText: string,
     provider: AIProvider = 'gemini'
 ): Promise<ExtractedJobFields> => {
-    if (provider === 'fake') return extractJobFake(rawText);
+    if (provider === 'fake') {
+        const startedAt = Date.now();
+        const result = extractJobFake(rawText);
+        recordAiCall({ provider: 'fake', operation: 'extract_job', model: 'fake-keyword-match-v1', startedAt, status: 'success' });
+        return result;
+    }
     const extracted = await withTimeout(
         provider === 'claude' ? extractJobWithClaude(rawText) : extractJobWithGemini(rawText)
     );

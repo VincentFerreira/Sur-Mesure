@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { importJsonFixture } from './cvManager';
+import { API_URL } from './apiUrl';
 
 export const unique = (): string => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -44,6 +45,6 @@ export async function createJob(page: Page, company: string, title: string, desc
 // (it writes nothing), unlike /api/__test__/reset, which would wipe data shared with
 // other tests running concurrently (fullyParallel) and so is never called here.
 export async function testHooksAvailable(request: APIRequestContext): Promise<boolean> {
-  const res = await request.post('http://localhost:3001/api/__test__/seed', { data: { cvs: [] } });
+  const res = await request.post(`${API_URL}/api/__test__/seed`, { data: { cvs: [] } });
   return res.ok();
 }

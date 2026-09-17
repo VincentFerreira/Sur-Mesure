@@ -246,7 +246,9 @@ export interface ScrapedSignal {
  */
 export interface ScrapedJob {
   id: string;
-  dedupeKey: string; // company+title slug — cross-run, cross-portal dedup
+  dedupeKey: string; // company+title slug — vestigial, kept only for its pre-existing DB constraint; fingerprint is the real cross-run identity now
+  fingerprint: string; // portal:externalId when the portal provides one, else a hash of company+title+department — see server/scraperFingerprint.js
+  externalId?: string; // stable per-posting id from the portal's own API, when available (France Travail, Arbeitnow); absent otherwise
   portal: string; // portal id, e.g. 'france_travail'
   title: string;
   company: string;
@@ -271,7 +273,75 @@ export interface ScrapedJob {
   score?: number; // 0-100
   signals?: ScrapedSignal[];
   status: ScrapedJobStatus;
+  // Optional, user-typed explanation set when dismissing this candidate (see
+  // components/scraper/DismissReasonPrompt.tsx) — never required, and settable
+  // independently of `status` (a follow-up PATCH can add it after the fact). Feeds
+  // server/scraperCandidatesStore.js's listRejectionReasons, which
+  // server/scrapers/claudeCli.js's qualifyAll injects into future scoring prompts so
+  // similar future postings score lower instead of resurfacing unfiltered.
+  dismissReason?: string;
   importedJobId?: string; // set once promoted to a real Job
-  firstSeenAt: string; // ISO
+  firstSeenAt: string; // ISO — set once, never changed
+  lastSeenAt: string; // ISO — bumped every time this exact posting (by fingerprint) reappears in a scrape run
+  viewedAt?: string; // ISO — set once, the first time a human actually looks at this row; never reset. Absent/null = "inédite"
   updatedAt: string; // ISO
+}
+
+// One WebSearch/WebFetch tool call narrated live from server/scrapers/claudeCli.js's
+// searchAll (server/scraperProgress.js) while POST /api/scraper/run is in flight —
+// polled by store/scraperStore.ts to show what's actually happening instead of a
+// static spinner for what can take several minutes.
+export type ScraperProgressEventStatus = 'pending' | 'done' | 'failed';
+
+export interface ScraperProgressEvent {
+  seq: number; // monotonically increasing — poll GET /run/progress?sinceSeq= with the last one seen
+  at: string; // ISO
+  message: string;
+  status: ScraperProgressEventStatus;
+}
+
+export interface ScraperProgress {
+  active: boolean;
+  events: ScraperProgressEvent[];
+}
+
+export const AI_CALL_PROVIDERS = ['gemini', 'claude', 'claude_cli', 'fake'] as const;
+export type AiCallProvider = (typeof AI_CALL_PROVIDERS)[number];
+
+export const AI_CALL_OPERATIONS = ['parse_cv', 'analyze_ats', 'extract_job', 'expand_keywords', 'qualify', 'search_all'] as const;
+export type AiCallOperation = (typeof AI_CALL_OPERATIONS)[number];
+
+export const AI_CALL_STATUSES = ['success', 'error'] as const;
+export type AiCallStatus = (typeof AI_CALL_STATUSES)[number];
+
+/**
+ * One logged AI call — client-side Gemini/Claude SDK call (services/aiService.ts) or
+ * server-side `claude` CLI invocation (server/scrapers/claudeCli.js) — for the
+ * Observability page. Fire-and-forget: logging a call must never affect the outcome of
+ * the underlying AI request.
+ */
+export interface AiCall {
+  id: string;
+  createdAt: string; // ISO
+  provider: AiCallProvider;
+  operation: AiCallOperation;
+  model?: string;
+  durationMs: number;
+  status: AiCallStatus;
+  errorMessage?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  finishReason?: string;
+  costUsd?: number; // only ever set by the claude_cli path, which can report it
+  metadata?: Record<string, unknown>;
+}
+
+export interface AiCallStats {
+  totalCalls: number;
+  totalTokens: number;
+  avgDurationMs: number;
+  errorRate: number; // 0-1
+  byProvider: Record<string, { calls: number; tokens: number; errors: number }>;
+  byOperation: Record<string, { calls: number; tokens: number; errors: number }>;
 }

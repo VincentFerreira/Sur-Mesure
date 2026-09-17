@@ -6,14 +6,17 @@ import os from 'os';
 import path from 'path';
 import { registerTestHooks, testHooksEnabled } from '../../server/testHooks.js';
 import { openCandidatesDb, getCandidate } from '../../server/scraperCandidatesStore.js';
+import { openObservabilityDb } from '../../server/observabilityStore.js';
 
 let dataDir: string;
 let candidatesDb: ReturnType<typeof openCandidatesDb>;
+let observabilityDb: ReturnType<typeof openObservabilityDb>;
 const originalNodeEnv = process.env.NODE_ENV;
 const originalTestHooks = process.env.YARB_TEST_HOOKS;
 
 afterEach(() => {
     if (candidatesDb) candidatesDb.close();
+    if (observabilityDb) observabilityDb.close();
     if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true });
     process.env.NODE_ENV = originalNodeEnv;
     if (originalTestHooks === undefined) delete process.env.YARB_TEST_HOOKS;
@@ -23,9 +26,10 @@ afterEach(() => {
 function makeApp() {
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yarb-testhooks-test-'));
     candidatesDb = openCandidatesDb(path.join(dataDir, 'scraper-candidates.sqlite'));
+    observabilityDb = openObservabilityDb(path.join(dataDir, 'observability.sqlite'));
     const app = express();
     app.use(express.json());
-    registerTestHooks(app, { dataDir, candidatesDb });
+    registerTestHooks(app, { dataDir, candidatesDb, observabilityDb });
     return { app, dataDir, candidatesDb };
 }
 

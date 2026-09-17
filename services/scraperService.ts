@@ -1,4 +1,4 @@
-import { JobWorkMode, ScrapedJob, ScrapedJobFit, ScrapedJobStatus, ScrapedSignal } from '../types';
+import { JobWorkMode, ScrapedJob, ScrapedJobFit, ScrapedJobStatus, ScrapedSignal, ScraperProgress } from '../types';
 import { apiFetch } from './apiClient';
 
 export interface QualifyResult {
@@ -16,6 +16,9 @@ export interface PortalReportEntry {
 export interface RunScrapeResult {
   created: ScrapedJob[];
   portalReport: PortalReportEntry[];
+  // Per-portal count of results dropped by the anti-noise relevance pre-filter
+  // (server/scraperRelevance.js) before they were ever stored — see routes.scraper.js.
+  filteredCounts: Record<string, number>;
 }
 
 export interface QualifyCandidateInput {
@@ -39,6 +42,14 @@ export async function runScrape(jobTitles?: string[]): Promise<RunScrapeResult> 
     { method: 'POST', body: JSON.stringify(jobTitles ? { jobTitles } : {}) },
     'Failed to run scrape'
   );
+}
+
+// Live progress for the in-flight POST /run above — poll while it's outstanding, with
+// the last-seen `seq` (0 on the first call), to get only the events that happened
+// since. See server/scraperProgress.js / server/scrapers/claudeCli.js's
+// runClaudeStreaming for where these events come from.
+export async function getRunProgress(sinceSeq = 0): Promise<ScraperProgress> {
+  return apiFetch<ScraperProgress>(`/scraper/run/progress?sinceSeq=${sinceSeq}`, undefined, 'Failed to fetch scrape progress');
 }
 
 // Widens `jobTitles` into more search keywords via the server-side `claude` CLI (see
@@ -74,11 +85,22 @@ export async function qualifyScrapedJobs(
   return results;
 }
 
-export async function dismissScrapedJob(id: string): Promise<ScrapedJob> {
+export async function dismissScrapedJob(id: string, reason?: string): Promise<ScrapedJob> {
   return apiFetch<ScrapedJob>(
     `/scraper/candidates/${id}`,
-    { method: 'PATCH', body: JSON.stringify({ status: 'dismissed' }) },
+    { method: 'PATCH', body: JSON.stringify({ status: 'dismissed', ...(reason ? { dismissReason: reason } : {}) }) },
     'Failed to dismiss scraped job'
+  );
+}
+
+// Adds/overwrites the reason on an already-dismissed candidate — the optional,
+// non-blocking follow-up offered right after dismissing (see JobSearchPage.tsx's
+// dismiss toast), so explaining why never slows down the dismiss action itself.
+export async function setDismissReason(id: string, reason: string): Promise<ScrapedJob> {
+  return apiFetch<ScrapedJob>(
+    `/scraper/candidates/${id}`,
+    { method: 'PATCH', body: JSON.stringify({ dismissReason: reason }) },
+    'Failed to save the dismiss reason'
   );
 }
 
@@ -112,4 +134,16 @@ export async function setScrapedJobQualification(id: string, qualification: Qual
 
 export async function deleteScrapedJob(id: string): Promise<void> {
   await apiFetch<{ success: true }>(`/scraper/candidates/${id}`, { method: 'DELETE' }, 'Failed to delete scraped job');
+}
+
+// Marks the given candidates as viewed for the first time (idempotent server-side —
+// an already-viewed id is left untouched). Used for both a single row
+// (IntersectionObserver) and the bulk "Tout marquer comme vu" button.
+export async function markScrapedJobsViewed(ids: string[]): Promise<{ count: number }> {
+  if (ids.length === 0) return { count: 0 };
+  return apiFetch<{ success: true; count: number }>(
+    '/scraper/candidates/mark-viewed',
+    { method: 'POST', body: JSON.stringify({ ids }) },
+    'Failed to mark scraped jobs as viewed'
+  );
 }
