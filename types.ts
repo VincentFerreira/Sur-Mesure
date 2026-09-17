@@ -211,6 +211,15 @@ export interface SearchPreferences {
   updatedAt: string | null; // ISO; null until the first save ever succeeds
 }
 
+// Singleton (like SearchPreferences above): exactly one record, read/written at a
+// fixed server-side path, no `id`. Holds editor-wide LaTeX rendering preferences
+// (currently just the chosen font, see lib/fonts.ts) — not part of CVData because it
+// applies across every CV, not per-resume.
+export interface TemplateSettings {
+  fontId: string;
+  updatedAt: string | null; // ISO; set on the first save (row is seeded with a default at creation)
+}
+
 export const SCRAPED_JOB_STATUSES = ['new', 'dismissed', 'imported'] as const;
 export type ScrapedJobStatus = (typeof SCRAPED_JOB_STATUSES)[number];
 

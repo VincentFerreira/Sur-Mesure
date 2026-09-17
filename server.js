@@ -13,6 +13,8 @@ import { createJobsRouter } from './server/routes.jobs.js';
 import { createCompaniesRouter } from './server/routes.companies.js';
 import { createPreferencesRouter } from './server/routes.preferences.js';
 import { createScraperRouter } from './server/routes.scraper.js';
+import { createTemplateSettingsRouter } from './server/routes.templateSettings.js';
+import { openTemplateSettingsDb } from './server/templateSettingsStore.js';
 
 const app = express();
 const PORT = 3001;
@@ -33,6 +35,7 @@ const PREFERENCES_STORAGE_FILE = path.join(YARB_DATA_DIR, 'preferences.json');
 // read-only migration source, never written to again.
 const SCRAPER_CANDIDATES_DB_PATH = path.join(YARB_DATA_DIR, 'scraper-candidates.sqlite');
 const SCRAPER_CANDIDATES_LEGACY_DIR = path.join(YARB_DATA_DIR, 'scraper-candidates');
+const TEMPLATE_SETTINGS_DB_PATH = path.join(YARB_DATA_DIR, 'template-settings.sqlite');
 
 ensureDir(CV_STORAGE_DIR);
 ensureDir(JOBS_STORAGE_DIR);
@@ -42,6 +45,7 @@ const { db: candidatesDb } = await migrateScraperCandidatesToSqlite({
     legacyDir: SCRAPER_CANDIDATES_LEGACY_DIR,
     dbPath: SCRAPER_CANDIDATES_DB_PATH,
 });
+const templateSettingsDb = openTemplateSettingsDb(TEMPLATE_SETTINGS_DB_PATH);
 
 const compileLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -131,6 +135,7 @@ app.use(
         preferencesFilePath: PREFERENCES_STORAGE_FILE,
     })
 );
+app.use('/api/template-settings', createTemplateSettingsRouter({ db: templateSettingsDb }));
 
 registerTestHooks(app, { dataDir: YARB_DATA_DIR, candidatesDb });
 
