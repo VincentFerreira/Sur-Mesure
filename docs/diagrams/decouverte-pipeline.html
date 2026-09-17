@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pipeline Découverte</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1240px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · Diagram Design</p>
+    <h1>Pipeline Découverte — de la recherche à l'import</h1>
+<svg viewBox="0 0 1320 1180" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="decouverte-pipeline-title decouverte-pipeline-desc">
+  <title id="decouverte-pipeline-title">Pipeline Découverte : sources → normalisation → dédoublonnage → scoring IA → stockage → action utilisateur</title>
+  <desc id="decouverte-pipeline-desc">Schéma montrant comment YARB collecte des offres depuis France Travail, Arbeitnow, freehire.me et une recherche web via Claude CLI, les normalise, les déduplique par empreinte, les score avec Claude CLI, les stocke dans SQLite, puis comment l'utilisateur importe, écarte ou marque une offre comme vue.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+    <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+    <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+  <rect x="156" y="136" width="928" height="124" rx="8"
+        fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+  <rect x="164" y="140" width="51" height="12" rx="2" fill="#f5f5f5"/>
+  <text x="189" y="149" fill="rgba(45,49,66,0.45)" font-size="7"
+        font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">SOURCES</text>
+
+  <rect x="520" y="280" width="600" height="436" rx="8"
+        fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+  <rect x="528" y="284" width="145" height="12" rx="2" fill="#f5f5f5"/>
+  <text x="600" y="293" fill="rgba(45,49,66,0.45)" font-size="7"
+        font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">PIPELINE SERVEUR (Express)</text>
+
+  <rect x="312" y="744" width="616" height="224" rx="8"
+        fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+  <rect x="320" y="748" width="110" height="12" rx="2" fill="#f5f5f5"/>
+  <text x="375" y="757" fill="rgba(45,49,66,0.45)" font-size="7"
+        font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">DÉCOUVERTE (client)</text>
+  <path d="M 620.0,48 L 620.0,64" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 620.0,116 L 620.0,160" fill="none" stroke="#4f5d75" stroke-width="1.2"/>
+  <path d="M 272.0,160 L 968.0,160" fill="none" stroke="#4f5d75" stroke-width="1.2"/>
+  <path d="M 272.0,160 L 272.0,176" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 504.0,160 L 504.0,176" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 736.0,160 L 736.0,176" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 968.0,160 L 968.0,176" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 272.0,244 V 270.0 Q 272.0,278.0 280.0,278.0 H 561.6 Q 569.6,278.0 569.6,286.0 V 312" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 504.0,244 V 270.0 Q 504.0,278.0 512.0,278.0 H 595.2 Q 603.2,278.0 603.2,286.0 V 312" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 736.0,244 V 270.0 Q 736.0,278.0 728.0,278.0 H 644.8 Q 636.8,278.0 636.8,286.0 V 312" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 968.0,244 V 270.0 Q 968.0,278.0 960.0,278.0 H 678.4 Q 670.4,278.0 670.4,286.0 V 312" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 620.0,376 L 620.0,408" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 620.0,484 L 620.0,516" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 620.0,592 L 620.0,624" fill="none" stroke="#eb6c36" stroke-width="1.3" marker-end="url(#arrow-accent)"/>
+  <rect x="562" y="593" width="116" height="12" rx="2" fill="#f5f5f5"/>
+  <text x="620" y="602" fill="#7a8399" font-size="7.5" font-family="'Geist Mono', monospace"
+        text-anchor="middle" letter-spacing="0.03em">candidat (nouveau | vu)</text>
+  <path d="M 704,644.0 L 872,644.0" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <rect x="762" y="629" width="51" height="12" rx="2" fill="#f5f5f5"/>
+  <text x="788" y="638" fill="#7a8399" font-size="7.5" font-family="'Geist Mono', monospace"
+        text-anchor="middle" letter-spacing="0.03em">candidats</text>
+  <path d="M 872,672.0 L 704,672.0" fill="none" stroke="#4f5d75" stroke-width="1.0" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <rect x="762" y="657" width="51" height="12" rx="2" fill="#f5f5f5"/>
+  <text x="788" y="666" fill="#7a8399" font-size="7.5" font-family="'Geist Mono', monospace"
+        text-anchor="middle" letter-spacing="0.03em">fit/score</text>
+  <path d="M 620.0,692 L 620.0,776" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 578.0,840 V 856.0 Q 578.0,864.0 570.0,864.0 H 420.0 Q 412.0,864.0 412.0,872.0 V 888" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 620.0,840 L 620.0,888" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 662.0,840 V 856.0 Q 662.0,864.0 670.0,864.0 H 820.0 Q 828.0,864.0 828.0,872.0 V 888" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 412.0,952 L 412.0,992" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+  <path d="M 536,808.0 H 468 Q 460,808.0 460,800.0 V 666.0 Q 460,658.0 468,658.0 H 536" fill="none" stroke="#4f5d75" stroke-width="1.0" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <rect x="380" y="718" width="153" height="12" rx="2" fill="#f5f5f5"/>
+  <text x="456" y="727" fill="#7a8399" font-size="7.5" font-family="'Geist Mono', monospace"
+        text-anchor="middle" letter-spacing="0.03em">PATCH statut / fit / score / vu</text>
+  <rect x="536" y="8" width="168" height="40" rx="6" fill="#f5f5f5"/>
+  <rect x="536" y="8" width="168" height="40" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="544" y="14" width="27" height="12" rx="2" fill="transparent" stroke="#7a8399" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="558" y="23" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CFG</text>
+  <text x="620" y="40" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Préférences</text>
+  <text x="620" y="55" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">jobTitles · locations · workModes · cvId</text>
+  <rect x="526" y="64" width="188" height="52" rx="6" fill="#f5f5f5"/>
+  <rect x="526" y="64" width="188" height="52" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="534" y="70" width="22" height="12" rx="2" fill="transparent" stroke="#6e6479" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="545" y="79" fill="#6e6479" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">AI</text>
+  <text x="620" y="96" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Élargir mots-clés</text>
+  <text x="620" y="111" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">Claude CLI · +10 mots-clés max</text>
+  <rect x="172" y="176" width="200" height="68" rx="6" fill="#f5f5f5"/>
+  <rect x="172" y="176" width="200" height="68" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="180" y="182" width="27" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="194" y="191" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+  <text x="272" y="208" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">France Travail</text>
+  <text x="272" y="223" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">Offres d&#x27;emploi v2 · OAuth2</text>
+  <rect x="404" y="176" width="200" height="68" rx="6" fill="#f5f5f5"/>
+  <rect x="404" y="176" width="200" height="68" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="412" y="182" width="27" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="426" y="191" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+  <text x="504" y="208" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Arbeitnow</text>
+  <text x="504" y="223" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">job-board-api · public, sans clé</text>
+  <rect x="636" y="176" width="200" height="68" rx="6" fill="#f5f5f5"/>
+  <rect x="636" y="176" width="200" height="68" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="644" y="182" width="27" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="658" y="191" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+  <text x="736" y="208" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">freehire.me</text>
+  <text x="736" y="223" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">agent/jobs/search · public</text>
+  <rect x="868" y="176" width="200" height="68" rx="6" fill="#f5f5f5"/>
+  <rect x="868" y="176" width="200" height="68" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="876" y="182" width="22" height="12" rx="2" fill="transparent" stroke="#6e6479" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="887" y="191" fill="#6e6479" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">AI</text>
+  <text x="968" y="208" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Claude CLI</text>
+  <text x="968" y="223" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">WebSearch/WebFetch · WTTJ, APEC</text>
+  <rect x="536" y="312" width="168" height="64" rx="6" fill="#f5f5f5"/>
+  <rect x="536" y="312" width="168" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="544" y="318" width="27" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="558" y="327" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SRV</text>
+  <text x="620" y="344" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Filtrer doublons</text>
+  <text x="620" y="359" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">vs Jobs : URL ou société+titre</text>
+  <rect x="536" y="408" width="168" height="76" rx="6" fill="#f5f5f5"/>
+  <rect x="536" y="408" width="168" height="76" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="544" y="414" width="27" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="558" y="423" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SRV</text>
+  <text x="620" y="440" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Normalize</text>
+  <text x="620" y="455" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">entités HTML · dept · title-case</text>
+  <text x="620" y="466" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">indicateur remote</text>
+  <rect x="536" y="516" width="168" height="76" rx="6" fill="#f5f5f5"/>
+  <rect x="536" y="516" width="168" height="76" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="544" y="522" width="27" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="558" y="531" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SRV</text>
+  <text x="620" y="548" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Fingerprint + Upsert</text>
+  <text x="620" y="563" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">portail:id ou hash(soc,titre,dept)</text>
+  <rect x="536" y="624" width="168" height="68" rx="6" fill="#f5f5f5"/>
+  <rect x="536" y="624" width="168" height="68" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.4"/>
+  <rect x="544" y="630" width="22" height="12" rx="2" fill="transparent" stroke="#eb6c36" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="555" y="639" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DB</text>
+  <text x="620" y="656" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">SQLite — candidates</text>
+  <text x="620" y="671" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">node:sqlite · UNIQUE(fingerprint)</text>
+  <rect x="872" y="616" width="232" height="84" rx="6" fill="#f5f5f5"/>
+  <rect x="872" y="616" width="232" height="84" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.4"/>
+  <rect x="880" y="622" width="22" height="12" rx="2" fill="transparent" stroke="#eb6c36" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="891" y="631" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">AI</text>
+  <text x="988" y="648" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">AI Qualify</text>
+  <text x="988" y="663" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">Claude CLI · claude -p, sans outil</text>
+  <text x="988" y="674" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">score 0-100 → fit (75/45) + signaux</text>
+  <rect x="536" y="776" width="168" height="64" rx="6" fill="#f5f5f5"/>
+  <rect x="536" y="776" width="168" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="544" y="782" width="22" height="12" rx="2" fill="transparent" stroke="#2e5aa8" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="555" y="791" fill="#2e5aa8" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+  <text x="620" y="808" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Liste Découverte</text>
+  <text x="620" y="823" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">non-vues d&#x27;abord, puis fit + récence</text>
+  <rect x="328" y="888" width="168" height="64" rx="6" fill="#f5f5f5"/>
+  <rect x="328" y="888" width="168" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="336" y="894" width="22" height="12" rx="2" fill="transparent" stroke="#2e5aa8" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="347" y="903" fill="#2e5aa8" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+  <text x="412" y="920" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Import → Job</text>
+  <text x="412" y="935" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">JobForm → addJob()</text>
+  <rect x="536" y="888" width="168" height="64" rx="6" fill="#f5f5f5"/>
+  <rect x="536" y="888" width="168" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="544" y="894" width="22" height="12" rx="2" fill="transparent" stroke="#2e5aa8" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="555" y="903" fill="#2e5aa8" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+  <text x="620" y="920" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Écarter</text>
+  <text x="620" y="935" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">status: dismissed</text>
+  <rect x="744" y="888" width="168" height="64" rx="6" fill="#f5f5f5"/>
+  <rect x="744" y="888" width="168" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="752" y="894" width="22" height="12" rx="2" fill="transparent" stroke="#2e5aa8" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="763" y="903" fill="#2e5aa8" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+  <text x="828" y="920" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Marquer vu</text>
+  <text x="828" y="935" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">IntersectionObserver 1s / bulk</text>
+  <rect x="328" y="992" width="168" height="64" rx="6" fill="#f5f5f5"/>
+  <rect x="328" y="992" width="168" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="336" y="998" width="33" height="12" rx="2" fill="transparent" stroke="#8c6d3f" stroke-opacity="0.45" stroke-width="0.8"/>
+  <text x="353" y="1007" fill="#8c6d3f" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">FILE</text>
+  <text x="412" y="1024" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Jobs (JSON)</text>
+  <text x="412" y="1039" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">server/store.js · data/jobs/*.json</text>
+  <line x1="40" y1="1070" x2="1280" y2="1070" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+  <text x="40" y="1086" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" letter-spacing="0.14em">TYPE</text>
+  <rect x="100" y="1076" width="27" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.55" stroke-width="0.8"/>
+  <text x="114" y="1085" fill="#4f5d75" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">API</text>
+  <text x="133" y="1085" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">Portail externe</text>
+  <rect x="229.78" y="1076" width="22" height="12" rx="2" fill="transparent" stroke="#6e6479" stroke-opacity="0.55" stroke-width="0.8"/>
+  <text x="241" y="1085" fill="#6e6479" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">AI</text>
+  <text x="257" y="1085" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">IA (Claude CLI)</text>
+  <rect x="353.8" y="1076" width="27" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.55" stroke-width="0.8"/>
+  <text x="367" y="1085" fill="#4f5d75" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">SRV</text>
+  <text x="387" y="1085" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">Étape serveur</text>
+  <rect x="474.18" y="1076" width="22" height="12" rx="2" fill="transparent" stroke="#eb6c36" stroke-opacity="0.55" stroke-width="0.8"/>
+  <text x="485" y="1085" fill="#eb6c36" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">DB</text>
+  <text x="502" y="1085" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">Base de données</text>
+  <rect x="598.2" y="1076" width="22" height="12" rx="2" fill="transparent" stroke="#2e5aa8" stroke-opacity="0.55" stroke-width="0.8"/>
+  <text x="609" y="1085" fill="#2e5aa8" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">UI</text>
+  <text x="626" y="1085" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">Interface client</text>
+  <rect x="726.9200000000001" y="1076" width="33" height="12" rx="2" fill="transparent" stroke="#8c6d3f" stroke-opacity="0.55" stroke-width="0.8"/>
+  <text x="743" y="1085" fill="#8c6d3f" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">FILE</text>
+  <text x="766" y="1085" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">Fichier JSON</text>
+  <rect x="848.3600000000001" y="1076" width="27" height="12" rx="2" fill="transparent" stroke="#7a8399" stroke-opacity="0.55" stroke-width="0.8"/>
+  <text x="862" y="1085" fill="#7a8399" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">CFG</text>
+  <text x="882" y="1085" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">Préférences</text>
+  <text x="40" y="1112" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" letter-spacing="0.14em">FLUX</text>
+  <line x1="100" y1="1106" x2="128" y2="1106" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="134" y="1109" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">Flux normal</text>
+  <line x1="215.7" y1="1106" x2="243.7" y2="1106" stroke="#eb6c36" stroke-width="1.3" marker-end="url(#arrow-accent)"/>
+  <text x="249.7" y="1109" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">Écriture initiale (focale)</text>
+  <line x1="401.9" y1="1106" x2="429.9" y2="1106" stroke="#4f5d75" stroke-width="1.0" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <text x="435.9" y="1109" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">Lecture / écriture retour</text>
+  <line x1="583.4" y1="1106" x2="611.4" y2="1106" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+  <text x="617.4" y="1109" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">Publication (Job créé)</text>
+  <text x="40" y="1132" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace" font-style="italic">DB / AI en accent = nœuds focaux (store principal · étape de décision IA)</text>
+</svg>
+  </div>
+</body>
+</html>
