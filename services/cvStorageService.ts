@@ -1,7 +1,8 @@
 import { CVData, CvMeta, CvRecord } from '../types';
 import { createMultiLangString, createMultiLangArray } from '../lib/i18n';
+import { API_PORT } from './apiClient';
 
-const API_BASE = `http://${window.location.hostname}:3001/api`;
+const API_BASE = `http://${window.location.hostname}:${API_PORT}/api`;
 const LS_KEY = 'cv_autosave';
 
 export type CVMeta = CvMeta;

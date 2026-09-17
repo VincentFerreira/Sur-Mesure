@@ -13,9 +13,14 @@ import { createJobsRouter } from './server/routes.jobs.js';
 import { createCompaniesRouter } from './server/routes.companies.js';
 import { createPreferencesRouter } from './server/routes.preferences.js';
 import { createScraperRouter } from './server/routes.scraper.js';
+import { createObservabilityRouter } from './server/routes.observability.js';
+import { openObservabilityDb } from './server/observabilityStore.js';
+import * as claudeCli from './server/scrapers/claudeCli.js';
 
 const app = express();
-const PORT = 3001;
+// Overridable so playwright.config.ts can spawn an e2e-only instance on a different
+// port than a normally-running `npm start` — see vite.config.ts's matching API_PORT.
+const PORT = Number(process.env.API_PORT) || 3001;
 
 // Allow all origins for local network multi-device access
 app.use(cors());
@@ -33,6 +38,7 @@ const PREFERENCES_STORAGE_FILE = path.join(YARB_DATA_DIR, 'preferences.json');
 // read-only migration source, never written to again.
 const SCRAPER_CANDIDATES_DB_PATH = path.join(YARB_DATA_DIR, 'scraper-candidates.sqlite');
 const SCRAPER_CANDIDATES_LEGACY_DIR = path.join(YARB_DATA_DIR, 'scraper-candidates');
+const OBSERVABILITY_DB_PATH = path.join(YARB_DATA_DIR, 'observability.sqlite');
 
 ensureDir(CV_STORAGE_DIR);
 ensureDir(JOBS_STORAGE_DIR);
@@ -42,6 +48,8 @@ const { db: candidatesDb } = await migrateScraperCandidatesToSqlite({
     legacyDir: SCRAPER_CANDIDATES_LEGACY_DIR,
     dbPath: SCRAPER_CANDIDATES_DB_PATH,
 });
+const observabilityDb = openObservabilityDb(OBSERVABILITY_DB_PATH);
+claudeCli.configureObservability(observabilityDb);
 
 const compileLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -131,8 +139,9 @@ app.use(
         preferencesFilePath: PREFERENCES_STORAGE_FILE,
     })
 );
+app.use('/api/observability', createObservabilityRouter({ observabilityDb }));
 
-registerTestHooks(app, { dataDir: YARB_DATA_DIR, candidatesDb });
+registerTestHooks(app, { dataDir: YARB_DATA_DIR, candidatesDb, observabilityDb });
 
 export { app };
 

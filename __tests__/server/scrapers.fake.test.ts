@@ -214,4 +214,36 @@ describe('qualifyAll (fake)', () => {
             expect(result['1'].fit).toBe('high');
         });
     });
+
+    describe('with rejection memory', () => {
+        it('downgrades fit by one level and tags a candidate from a previously-rejected company', async () => {
+            const result = await qualifyAll(
+                [{ id: '1', title: 'Senior QA Engineer', company: 'Acme' }],
+                ['QA Engineer'],
+                [],
+                undefined,
+                [],
+                [{ title: 'QA Engineer', company: 'Acme', reason: 'ESN / régie' }]
+            );
+            expect(result['1'].fit).toBe('medium');
+            expect(result['1'].signals).toContainEqual({ label: 'Comme rejet précédent', polarity: 'negative' });
+        });
+
+        it('does not downgrade a candidate from an unrelated company', async () => {
+            const result = await qualifyAll(
+                [{ id: '1', title: 'Senior QA Engineer', company: 'Acme' }],
+                ['QA Engineer'],
+                [],
+                undefined,
+                [],
+                [{ title: 'QA Engineer', company: 'Other Co', reason: 'ESN / régie' }]
+            );
+            expect(result['1'].fit).toBe('high');
+        });
+
+        it('does not affect fit when no rejection memory is given (backward compatible)', async () => {
+            const result = await qualifyAll([{ id: '1', title: 'Senior QA Engineer', company: 'Acme' }], ['QA Engineer'], [], undefined);
+            expect(result['1'].fit).toBe('high');
+        });
+    });
 });

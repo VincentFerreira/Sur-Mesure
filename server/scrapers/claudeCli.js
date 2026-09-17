@@ -2,19 +2,62 @@
 // Code) for every job-search AI step — instead of calling the Anthropic/Gemini APIs
 // directly with a separate billed key. No separate rate limit or API key to manage:
 // it uses whatever auth the CLI already has (subscription or otherwise). Used for:
-// - searchAll: Claude Code's own built-in WebSearch/WebFetch tools, exactly mirroring
-//   ai-job-search's WebSearch fallback (welcometothejungle.com, apec.fr).
+// - searchAll: Claude Code's own built-in WebSearch/WebFetch tools, mirroring
+//   ai-job-search's WebSearch fallback. Deliberately does NOT steer the search toward
+//   any specific site — welcometothejungle.com/apec.fr were tried and dropped (see
+//   buildSearchPrompt) because their pages 403/can't be fetched, making a forced
+//   `site:` query on either pure wasted search+fetch budget by construction.
 // - expandKeywords / qualifyAll: plain text-in/JSON-out calls (no tools needed) for
 //   widening the search net and judging each candidate's fit — previously done via
 //   services/aiService.ts's direct Gemini/Claude API calls (see git history), moved
 //   here so the whole job-search pipeline rides on the one CLI mechanism.
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
+import { createInterface } from 'readline';
+import { randomUUID } from 'crypto';
 import { fitFromScore } from './scraperFit.js';
+import { insertCall } from '../observabilityStore.js';
+import { pushEvent } from '../scraperProgress.js';
 
 const execFileAsync = promisify(execFile);
 
 export const id = 'claude_cli';
+
+// Set once at server boot (server.js) so runClaude below can log every invocation to
+// the Observability page's store — module-level rather than threaded through every
+// exported function's signature, so searchAll/expandKeywords/qualifyAll keep the same
+// public API existing callers (and __tests__/server/scrapers.claudeCli.test.ts) rely
+// on. Left null in tests, which never call this — logging is skipped, not errored, in
+// that case (see the `if (!observabilityDb) return` guard in logCall below).
+let observabilityDb = null;
+export function configureObservability(db) {
+    observabilityDb = db;
+}
+
+// Never let a logging failure break the actual scrape/qualify/search flow — this is
+// purely observational.
+function logCall({ operation, model, startedAt, status, errorMessage, usage, costUsd, metadata }) {
+    if (!observabilityDb) return;
+    try {
+        insertCall(observabilityDb, {
+            id: randomUUID(),
+            createdAt: new Date().toISOString(),
+            provider: 'claude_cli',
+            operation,
+            model,
+            durationMs: Date.now() - startedAt,
+            status,
+            errorMessage,
+            promptTokens: usage?.input_tokens,
+            completionTokens: usage?.output_tokens,
+            totalTokens: usage ? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0) : undefined,
+            costUsd,
+            metadata,
+        });
+    } catch (err) {
+        console.error('Failed to log claude CLI call to the observability store:', err);
+    }
+}
 
 const CLAUDE_BIN = process.env.CLAUDE_CLI_PATH || 'claude';
 // A `claude -p` turn with WebSearch/WebFetch can run several searches/fetches
@@ -27,6 +70,14 @@ const CONTRACT_TYPES = ['CDI', 'CDD', 'freelance', 'internship'];
 const MAX_EXPANDED_KEYWORDS = 10;
 const QUALIFY_BATCH_SIZE = 25;
 const DESCRIPTION_EXCERPT_LENGTH = 400;
+// Hard cost ceiling for searchAll specifically — found via live testing that an
+// unbounded search (retrying dead-end WebFetch URLs, following stale search results)
+// can spend well over $1 finding a single verified posting. `--max-budget-usd` makes
+// the CLI itself stop once spent cost crosses this, instead of only the (much
+// coarser) TIMEOUT_MS wall-clock cutoff below. Configurable since a real multi-title
+// run's legitimate cost varies with how many job titles are searched at once.
+const SEARCH_MAX_BUDGET_USD = Number(process.env.SCRAPER_SEARCH_MAX_BUDGET_USD ?? 3);
+const MAX_PROGRESS_MESSAGE_LENGTH = 140;
 
 function stripCodeFence(text) {
     const trimmed = (text ?? '').trim();
@@ -50,8 +101,9 @@ function stripCodeFence(text) {
 // services/aiService.ts's direct SDK calls, used by other features), the CLI prefers
 // it over the mounted OAuth session (~/.claude, ~/.claude.json) — which is exactly the
 // separate, billed-API-key path this module exists to avoid.
-async function runClaude(prompt, tools) {
+async function runClaude(prompt, tools, operation, metadata) {
     const { ANTHROPIC_API_KEY: _unused1, ANTHROPIC_AUTH_TOKEN: _unused2, ...cliEnv } = process.env;
+    const startedAt = Date.now();
 
     let stdout;
     try {
@@ -68,6 +120,7 @@ async function runClaude(prompt, tools) {
             { timeout: TIMEOUT_MS, maxBuffer: MAX_BUFFER, env: cliEnv }
         ));
     } catch (err) {
+        logCall({ operation, startedAt, status: 'error', errorMessage: `claude CLI invocation failed: ${err.message}`, metadata });
         throw new Error(`claude CLI invocation failed: ${err.message}`);
     }
 
@@ -75,12 +128,171 @@ async function runClaude(prompt, tools) {
     try {
         payload = JSON.parse(stdout);
     } catch {
+        logCall({ operation, startedAt, status: 'error', errorMessage: 'claude CLI returned unparsable output', metadata });
         throw new Error('claude CLI returned unparsable output');
     }
     if (payload.is_error) {
-        throw new Error(`claude CLI reported an error: ${payload.result ?? payload.subtype ?? 'unknown'}`);
+        const errorMessage = payload.result ?? payload.subtype ?? 'unknown';
+        logCall({ operation, startedAt, status: 'error', errorMessage: `claude CLI reported an error: ${errorMessage}`, model: payload.model, metadata });
+        throw new Error(`claude CLI reported an error: ${errorMessage}`);
     }
+    // `--output-format json`'s envelope carries more than `.result`/`.is_error` (the
+    // only fields read above) — `usage`/`total_cost_usd`/`model` when the installed CLI
+    // version reports them. Read defensively: a missing/renamed field must never break
+    // the call, it just means that call's row has no token/cost figures.
+    logCall({ operation, startedAt, status: 'success', model: payload.model, usage: payload.usage, costUsd: payload.total_cost_usd, metadata });
     return payload.result ?? '';
+}
+
+function truncate(text, maxLength) {
+    return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+// Human-readable one-liner for a WebSearch/WebFetch tool call, pushed to
+// scraperProgress.js as it happens — surfaced live in the UI (see
+// store/scraperStore.ts) instead of a static spinner for what can take minutes.
+function describeToolUse(name, input) {
+    if (name === 'WebSearch') return truncate(`Recherche : ${input?.query ?? ''}`, MAX_PROGRESS_MESSAGE_LENGTH);
+    if (name === 'WebFetch') {
+        let host = input?.url ?? '';
+        try {
+            host = new URL(input.url).hostname;
+        } catch {
+            // Not a valid absolute URL — fall back to the raw string above.
+        }
+        return truncate(`Vérification : ${host}`, MAX_PROGRESS_MESSAGE_LENGTH);
+    }
+    return name;
+}
+
+// Best-effort text extraction from a `tool_result` content block, which is either a
+// plain string or an array of {type:"text", text} blocks depending on the tool.
+function toolResultText(content) {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return '';
+    return content.map((block) => (block && typeof block.text === 'string' ? block.text : '')).join(' ');
+}
+
+// Matches the concrete failure modes seen in live testing (see buildSearchPrompt's
+// "be efficient" guidance, added for exactly these): a blocked/nonexistent page, or a
+// redirect WebFetch didn't resolve on its own — never a false positive on genuine
+// posting content, which wouldn't contain these exact phrases.
+const FETCH_FAILURE_PATTERN = /HTTP 4\d\d|HTTP 5\d\d|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|REDIRECT DETECTED/;
+
+// Runs one `claude -p` turn in --output-format stream-json, parsing each NDJSON event
+// as it arrives (rather than buffering the whole run like runClaude above) — the only
+// way to get live progress out of a call that can run for several minutes. Used by
+// searchAll only: it's the one operation with tool calls worth narrating (WebSearch/
+// WebFetch) and long enough to need it; expandKeywords/qualifyAll stay on the simpler
+// buffered runClaude.
+function runClaudeStreaming(prompt, tools, operation, { maxBudgetUsd } = {}) {
+    const { ANTHROPIC_API_KEY: _unused1, ANTHROPIC_AUTH_TOKEN: _unused2, ...cliEnv } = process.env;
+    const startedAt = Date.now();
+
+    return new Promise((resolve, reject) => {
+        const child = spawn(
+            CLAUDE_BIN,
+            [
+                '-p', prompt,
+                '--output-format', 'stream-json',
+                '--verbose',
+                '--tools', tools,
+                ...(tools ? ['--allowedTools', tools] : []),
+                '--no-session-persistence',
+                '--strict-mcp-config',
+                ...(maxBudgetUsd ? ['--max-budget-usd', String(maxBudgetUsd)] : []),
+            ],
+            { timeout: TIMEOUT_MS, env: cliEnv }
+        );
+
+        let resultEvent = null;
+        let webSearchCount = 0;
+        let webFetchCount = 0;
+        let webFetchFailures = 0;
+        // Maps a tool_use's id to its human-readable label, so the later tool_result
+        // event (which only carries the id) can be narrated with the same wording.
+        const labelByToolUseId = new Map();
+        let stderrText = '';
+
+        child.stderr.on('data', (chunk) => {
+            stderrText += chunk;
+        });
+
+        const lines = createInterface({ input: child.stdout });
+        lines.on('line', (line) => {
+            if (!line.trim()) return;
+            let event;
+            try {
+                event = JSON.parse(line);
+            } catch {
+                return; // A stray non-JSON line must never abort an otherwise-healthy run.
+            }
+
+            if (event.type === 'assistant') {
+                for (const block of event.message?.content ?? []) {
+                    if (block.type !== 'tool_use' || (block.name !== 'WebSearch' && block.name !== 'WebFetch')) continue;
+                    if (block.name === 'WebSearch') webSearchCount += 1;
+                    else webFetchCount += 1;
+                    const label = describeToolUse(block.name, block.input);
+                    labelByToolUseId.set(block.id, label);
+                    pushEvent(label, 'pending');
+                }
+            } else if (event.type === 'user') {
+                for (const block of event.message?.content ?? []) {
+                    if (block.type !== 'tool_result') continue;
+                    const label = labelByToolUseId.get(block.tool_use_id);
+                    if (!label) continue;
+                    const failed = FETCH_FAILURE_PATTERN.test(toolResultText(block.content));
+                    if (failed) webFetchFailures += 1;
+                    pushEvent(label, failed ? 'failed' : 'done');
+                }
+            } else if (event.type === 'result') {
+                resultEvent = event;
+            }
+        });
+
+        child.on('error', (err) => {
+            logCall({ operation, startedAt, status: 'error', errorMessage: `claude CLI invocation failed: ${err.message}` });
+            reject(new Error(`claude CLI invocation failed: ${err.message}`));
+        });
+
+        child.on('close', (code) => {
+            if (!resultEvent) {
+                const message = stderrText.trim() || `claude CLI exited with code ${code} before returning a result`;
+                logCall({ operation, startedAt, status: 'error', errorMessage: `claude CLI invocation failed: ${message}` });
+                reject(new Error(`claude CLI invocation failed: ${message}`));
+                return;
+            }
+            if (resultEvent.is_error) {
+                const errorMessage = resultEvent.result ?? resultEvent.subtype ?? 'unknown';
+                logCall({ operation, startedAt, status: 'error', errorMessage: `claude CLI reported an error: ${errorMessage}`, model: resultEvent.model });
+                reject(new Error(`claude CLI reported an error: ${errorMessage}`));
+                return;
+            }
+            // Richer than runClaude's logCall: num_turns/modelUsage/tool-call counts —
+            // found via live testing that a single call can span multiple models
+            // (WebSearch summarization on a cheap model, orchestration on a pricier one)
+            // and dozens of turns, none of which the flat prompt/completion token count
+            // captures. total_cost_usd already accounts for all of it; this metadata
+            // explains *why* a call cost what it did.
+            logCall({
+                operation,
+                startedAt,
+                status: 'success',
+                model: resultEvent.model,
+                usage: resultEvent.usage,
+                costUsd: resultEvent.total_cost_usd,
+                metadata: {
+                    numTurns: resultEvent.num_turns,
+                    modelUsage: resultEvent.modelUsage,
+                    webSearchCount,
+                    webFetchCount,
+                    webFetchFailures,
+                },
+            });
+            resolve(resultEvent.result ?? '');
+        });
+    });
 }
 
 // ─── Web search (searchAll) ────────────────────────────────────────────────────
@@ -88,14 +300,15 @@ async function runClaude(prompt, tools) {
 function buildSearchPrompt(jobTitles, locations) {
     return `You are helping a job seeker find current openings by searching the live web — the same way a human would manually check job boards that have no public API.
 
-Search specifically on these French job boards using "site:" queries, in addition to general web search:
-- site:welcometothejungle.com
-- site:apec.fr
-
 Target job titles: ${jobTitles.join(', ')}
 Acceptable locations (if empty, no location constraint): ${locations.join(', ') || '(none)'}
 
 For every promising result, fetch the actual posting page before including it — never report a posting you have not fetched and verified is real and current.
+
+Be efficient — you are on a limited budget:
+- If a fetch fails (HTTP 403/404, a DNS error, or a redirect you can't resolve), do NOT retry that same URL. Move on to a different search query or a different candidate result instead.
+- Give up on a lead after at most 2 failed fetch attempts on it, rather than working through many stale links from the same search.
+- Prefer sources you can actually fetch (company career pages, greenhouse.io, lever.co, francetravail.fr) over ones known to block automated fetches.
 
 When done, respond with ONLY a JSON array (no markdown, no prose before or after) of the verified postings, using this exact shape per entry:
 {"title": string, "company": string, "location": string, "url": string, "postedDate": string, "descriptionRaw": string, "contractType": string, "salaryRange": string}
@@ -127,7 +340,9 @@ function normalizeSearchResult(item) {
 export async function searchAll({ jobTitles, locations }) {
     if (!jobTitles || jobTitles.length === 0) return [];
 
-    const text = await runClaude(buildSearchPrompt(jobTitles, locations), 'WebSearch,WebFetch');
+    const text = await runClaudeStreaming(buildSearchPrompt(jobTitles, locations), 'WebSearch,WebFetch', 'search_all', {
+        maxBudgetUsd: SEARCH_MAX_BUDGET_USD,
+    });
 
     let parsed;
     try {
@@ -161,7 +376,7 @@ export async function expandKeywords(jobTitles) {
 
     let text;
     try {
-        text = await runClaude(buildExpandPrompt(jobTitles), '');
+        text = await runClaude(buildExpandPrompt(jobTitles), '', 'expand_keywords');
     } catch (err) {
         console.error('Keyword expansion via claude CLI failed; using the configured titles only.', err);
         return jobTitles;
@@ -211,7 +426,19 @@ The job seeker's own CV is provided below. Use it as the primary signal: judge h
 - A low score (0-44) now also covers a posting whose core requirements the CV clearly doesn't meet, even if the title matches
 Include a signal reflecting the CV match specifically (e.g. {"label": "CV aligné", "polarity": "positive"} or {"label": "Écart CV", "polarity": "negative"}).`;
 
-function buildQualifyPrompt(jobTitles, locations, cvText, workModes, batch) {
+// Appended (not part of QUALIFY_PROMPT_BASE) so the instruction only ever appears
+// alongside the list it refers to — same reasoning as QUALIFY_PROMPT_WITH_CV_ADDENDUM
+// only appearing alongside a real CV. `rejectionMemory` comes from
+// server/scraperCandidatesStore.js's listRejectionReasons: postings this same job
+// seeker has already dismissed, with their own short explanation why — captured via
+// PATCH /candidates/:id's dismissReason at dismiss time.
+function buildRejectionMemorySection(rejectionMemory) {
+    if (!rejectionMemory || rejectionMemory.length === 0) return '';
+    const lines = rejectionMemory.map((r) => `- ${r.title} @ ${r.company}: ${r.reason}`).join('\n');
+    return `\n\n== PREVIOUSLY REJECTED BY THIS JOB SEEKER (with their own reasons) ==\nUse these as negative examples, not a blocklist of exact titles/companies: if a candidate below shares the same underlying disqualifying pattern (e.g. same kind of structure, same stated dealbreaker), score it low and add a signal naming the match (e.g. {"label": "Comme rejet précédent", "polarity": "negative"}). Do not penalize a candidate that merely shares a job title with one of these if the actual reason given doesn't apply to it.\n${lines}`;
+}
+
+function buildQualifyPrompt(jobTitles, locations, cvText, workModes, rejectionMemory, batch) {
     const candidatesText = batch
         .map(
             (c) =>
@@ -221,8 +448,9 @@ function buildQualifyPrompt(jobTitles, locations, cvText, workModes, batch) {
     const locationsSection = locations.length > 0 ? `\n\n== ACCEPTABLE LOCATIONS ==\n${locations.join('\n')}` : '';
     const workModesSection = workModes.length > 0 ? `\n\n== ACCEPTABLE WORK MODES ==\n${workModes.join('\n')}` : '';
     const cvSection = cvText ? `\n\n== CANDIDATE'S CV ==\n${cvText}` : '';
+    const rejectionMemorySection = buildRejectionMemorySection(rejectionMemory);
     const prompt = cvText ? QUALIFY_PROMPT_BASE + QUALIFY_PROMPT_WITH_CV_ADDENDUM : QUALIFY_PROMPT_BASE;
-    return `${prompt}\n\n== TARGET JOB TITLES ==\n${jobTitles.join('\n')}${locationsSection}${workModesSection}${cvSection}\n\n== CANDIDATES ==\n${candidatesText}`;
+    return `${prompt}\n\n== TARGET JOB TITLES ==\n${jobTitles.join('\n')}${locationsSection}${workModesSection}${cvSection}${rejectionMemorySection}\n\n== CANDIDATES ==\n${candidatesText}`;
 }
 
 const MAX_SIGNALS = 4;
@@ -246,8 +474,10 @@ function toQualifyMap(results) {
     return map;
 }
 
-async function qualifyBatch(jobTitles, locations, cvText, workModes, batch) {
-    const text = await runClaude(buildQualifyPrompt(jobTitles, locations, cvText, workModes, batch), '');
+async function qualifyBatch(jobTitles, locations, cvText, workModes, rejectionMemory, batch) {
+    const text = await runClaude(buildQualifyPrompt(jobTitles, locations, cvText, workModes, rejectionMemory, batch), '', 'qualify', {
+        batchSize: batch.length,
+    });
     let parsed;
     try {
         parsed = JSON.parse(stripCodeFence(text));
@@ -270,8 +500,10 @@ async function qualifyBatch(jobTitles, locations, cvText, workModes, batch) {
 // already-computed results, so failures are caught and logged per batch rather than
 // aborting the whole pass (mirrors the per-portal isolation in this module's
 // runScrape orchestrator).
+// `rejectionMemory` — {title, company, reason}[] from listRejectionReasons — is the
+// same across every batch of one call, same as jobTitles/locations/cvText/workModes.
 /** @returns {Promise<Record<string, {fit: string, score: number, signals: {label: string, polarity: string}[]}>>} */
-export async function qualifyAll(candidates, jobTitles, locations, cvText, workModes = []) {
+export async function qualifyAll(candidates, jobTitles, locations, cvText, workModes = [], rejectionMemory = []) {
     if (!candidates || candidates.length === 0 || !jobTitles || jobTitles.length === 0) return {};
 
     const batches = [];
@@ -282,7 +514,7 @@ export async function qualifyAll(candidates, jobTitles, locations, cvText, workM
     const qualifyMap = {};
     for (const batch of batches) {
         try {
-            Object.assign(qualifyMap, await qualifyBatch(jobTitles, locations, cvText, workModes, batch));
+            Object.assign(qualifyMap, await qualifyBatch(jobTitles, locations, cvText, workModes, rejectionMemory, batch));
         } catch (err) {
             console.error(`Qualification batch failed via claude CLI (${batch.length} candidates left unfiltered):`, err);
         }

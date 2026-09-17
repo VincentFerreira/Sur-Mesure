@@ -1,3 +1,8 @@
+// @vitest-environment jsdom
+// aiService.ts now imports services/observabilityService.ts (AI call logging, see
+// recordAiCall) which imports apiClient.ts — apiClient reads `window.location` at
+// module scope, so this suite needs jsdom like cvStorageService.test.ts's, not the
+// project's default 'node' test environment.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // vi.hoisted so this mock function exists before the vi.mock factory below runs

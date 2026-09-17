@@ -1,7 +1,7 @@
 const MAX_KEY_LENGTH = 120;
 const DIACRITICS_RANGE = new RegExp('[̀-ͯ]', 'g');
 
-function slugify(value) {
+export function slugify(value) {
     return value
         .normalize('NFD')
         .replace(DIACRITICS_RANGE, '')

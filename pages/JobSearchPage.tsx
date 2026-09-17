@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, Radar } from 'lucide-react';
+import { Loader2, Radar, Check, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useScraperStore } from '../store/scraperStore';
 import { usePreferencesStore } from '../store/preferencesStore';
@@ -7,6 +7,7 @@ import { useJobsStore } from '../store/jobsStore';
 import { ScrapedJob, ScrapedJobStatus } from '../types';
 import JobForm from '../components/jobs/JobForm';
 import ScrapedJobsList from '../components/scraper/ScrapedJobsList';
+import DismissReasonToast from '../components/scraper/DismissReasonToast';
 import { formatRelativeDate, portalLabel } from '../components/scraper/scrapedJobMeta';
 import { CreateJobInput } from '../services/jobService';
 import { expandSearchKeywords, qualifyScrapedJobs } from '../services/scraperService';
@@ -30,17 +31,26 @@ const JobSearchPage: React.FC = () => {
     loading,
     error,
     lastRunReport,
+    lastRunCreated,
+    lastDismissed,
+    progressEvents,
     fetchCandidates,
     runScrape,
     dismissCandidate,
+    setDismissReason,
+    clearLastDismissed,
     importCandidate,
     setCandidateQualification,
+    markCandidatesViewed,
   } = useScraperStore();
   const { preferences, fetchPreferences } = usePreferencesStore();
   const { addJob } = useJobsStore();
   const [tab, setTab] = useState<ScrapedJobStatus>('new');
   const [importing, setImporting] = useState<ScrapedJob | null>(null);
   const [stage, setStage] = useState<PipelineStage>('idle');
+  // Set only by the post-scrape banner's "Voir les N" button — a passive affordance,
+  // not an independent persistent toggle, so clicking any tab button directly resets it.
+  const [unviewedOnly, setUnviewedOnly] = useState(false);
   // JobForm stays mounted (returns null) while closed, so its useState initializers only
   // run once — bump this on every open (same trick as CompaniesPage's formSession) so
   // reopening it for a different candidate always starts from that candidate's fields.
@@ -51,7 +61,10 @@ const JobSearchPage: React.FC = () => {
     fetchPreferences();
   }, [fetchCandidates, fetchPreferences]);
 
-  const visibleCandidates = useMemo(() => candidates.filter((c) => c.status === tab), [candidates, tab]);
+  const visibleCandidates = useMemo(
+    () => candidates.filter((c) => c.status === tab && (!unviewedOnly || !c.viewedAt)),
+    [candidates, tab, unviewedOnly]
+  );
   const tabCounts = useMemo(() => {
     const counts: Record<ScrapedJobStatus, number> = { new: 0, dismissed: 0, imported: 0 };
     for (const c of candidates) counts[c.status] += 1;
@@ -62,6 +75,21 @@ const JobSearchPage: React.FC = () => {
     () => candidates.reduce((max, c) => (c.firstSeenAt > max ? c.firstSeenAt : max), ''),
     [candidates]
   );
+
+  // "Inédite" = status 'new' AND never viewed — matches exactly the population the
+  // "Nouvelles" tab already shows, and is where "Voir les N" naturally navigates to.
+  // Scoping to status 'new' (not "any unviewed") deliberately excludes an
+  // already-dismissed/imported candidate: nobody still needs to act on it, even if
+  // literally nobody's eyes were ever on it.
+  const unviewedNew = useMemo(() => candidates.filter((c) => c.status === 'new' && !c.viewedAt), [candidates]);
+  const unviewedNewHighFit = useMemo(() => unviewedNew.filter((c) => c.fit === 'high').length, [unviewedNew]);
+  const totalReturnedThisRun = useMemo(() => lastRunReport?.reduce((sum, e) => sum + (e.count ?? 0), 0) ?? 0, [lastRunReport]);
+  const alreadyKnownThisRun = totalReturnedThisRun - (lastRunCreated?.length ?? 0);
+  const newByPortal = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of lastRunCreated ?? []) counts.set(c.portal, (counts.get(c.portal) ?? 0) + 1);
+    return [...counts.entries()];
+  }, [lastRunCreated]);
 
   const openImport = (candidate: ScrapedJob) => {
     setImporting(candidate);
@@ -167,6 +195,22 @@ const JobSearchPage: React.FC = () => {
           </button>
         </div>
 
+        {stage === 'searching' && progressEvents.length > 0 && (
+          <div
+            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mb-4 space-y-1"
+            data-testid="scrape-progress-feed"
+          >
+            {progressEvents.map((e) => (
+              <div key={e.seq} className="flex items-center gap-1.5 text-xs text-slate-500">
+                {e.status === 'pending' && <Loader2 className="w-3 h-3 animate-spin text-slate-400 shrink-0" />}
+                {e.status === 'done' && <Check className="w-3 h-3 text-emerald-500 shrink-0" />}
+                {e.status === 'failed' && <X className="w-3 h-3 text-amber-500 shrink-0" />}
+                <span className="truncate">{e.message}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {lastScrapeAt && (
           <p className="text-xs text-slate-400 mb-4">
             Dernier scrape {formatRelativeDate(lastScrapeAt)} · {candidates.length} offres
@@ -183,13 +227,45 @@ const JobSearchPage: React.FC = () => {
           </p>
         )}
 
-        {lastRunReport && (
-          <div className="text-sm bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 mb-4" data-testid="scrape-run-report">
-            {lastRunReport.map((entry) => (
-              <p key={entry.portal} className={entry.error ? 'text-amber-700' : 'text-slate-600'}>
-                {portalLabel(entry.portal)}: {entry.error ? `unavailable (${entry.error})` : `${entry.count} found`}
-              </p>
-            ))}
+        {lastRunReport?.some((e) => e.error) && (
+          <div className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-4" data-testid="scrape-run-errors">
+            {lastRunReport
+              .filter((e) => e.error)
+              .map((e) => (
+                <p key={e.portal}>
+                  {portalLabel(e.portal)} indisponible ({e.error})
+                </p>
+              ))}
+          </div>
+        )}
+
+        {lastRunReport && unviewedNew.length > 0 && (
+          <div className="bg-sky-50 border border-sky-100 rounded-lg px-4 py-3 mb-4" data-testid="unseen-banner">
+            <p className="text-sm font-medium text-sky-900">
+              {unviewedNew.length} offre{unviewedNew.length > 1 ? 's' : ''} inédite{unviewedNew.length > 1 ? 's' : ''}, dont{' '}
+              {unviewedNewHighFit} en correspondance forte
+            </p>
+            <p className="text-xs text-sky-700 mt-1">
+              {totalReturnedThisRun} remontée{totalReturnedThisRun > 1 ? 's' : ''} · {alreadyKnownThisRun} déjà connue
+              {alreadyKnownThisRun > 1 ? 's' : ''}
+              {newByPortal.length > 0 &&
+                newByPortal.map(([portal, count]) => (
+                  <React.Fragment key={portal}>
+                    {' '}
+                    · {portalLabel(portal)} {count}
+                  </React.Fragment>
+                ))}
+            </p>
+            <button
+              onClick={() => {
+                setTab('new');
+                setUnviewedOnly(true);
+              }}
+              data-testid="view-unseen-button"
+              className="text-xs font-semibold text-sky-700 underline mt-2"
+            >
+              Voir les {unviewedNew.length}
+            </button>
           </div>
         )}
 
@@ -200,7 +276,10 @@ const JobSearchPage: React.FC = () => {
             {TABS.map((t) => (
               <button
                 key={t}
-                onClick={() => setTab(t)}
+                onClick={() => {
+                  setTab(t);
+                  setUnviewedOnly(false);
+                }}
                 data-testid={`scraped-jobs-tab-${t}`}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                   tab === t ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'
@@ -210,7 +289,16 @@ const JobSearchPage: React.FC = () => {
               </button>
             ))}
           </div>
-          <span className="text-xs text-slate-400">↑↓ Fit, puis récence</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => markCandidatesViewed(visibleCandidates.filter((c) => !c.viewedAt).map((c) => c.id))}
+              data-testid="mark-all-viewed-button"
+              className="text-xs font-medium text-slate-500 hover:text-slate-700"
+            >
+              Tout marquer comme vu
+            </button>
+            <span className="text-xs text-slate-400">↑↓ Fit, puis récence</span>
+          </div>
         </div>
 
         {loading && (
@@ -227,7 +315,12 @@ const JobSearchPage: React.FC = () => {
         )}
 
         {!loading && visibleCandidates.length > 0 && (
-          <ScrapedJobsList candidates={visibleCandidates} onImport={openImport} onDismiss={(c) => dismissCandidate(c.id)} />
+          <ScrapedJobsList
+            candidates={visibleCandidates}
+            onImport={openImport}
+            onDismiss={(c) => dismissCandidate(c.id)}
+            onMarkViewed={(id) => markCandidatesViewed([id])}
+          />
         )}
       </div>
 
@@ -251,6 +344,14 @@ const JobSearchPage: React.FC = () => {
         onClose={closeImport}
         onSubmit={handleSubmit}
       />
+
+      {lastDismissed && (
+        <DismissReasonToast
+          title={lastDismissed.title}
+          onSave={(reason) => setDismissReason(lastDismissed.id, reason)}
+          onClose={clearLastDismissed}
+        />
+      )}
     </div>
   );
 };
