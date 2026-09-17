@@ -199,6 +199,14 @@ export interface Job {
   updatedAt: string; // ISO
 }
 
+// Scraper portal/source ids — mirrors server/scrapers/index.js's registry
+// (france_travail/arbeitnow/freehire as buildRegistry() portals, claude_cli as the
+// single-shot searchAll portal). Duplicated as a plain array in
+// server/routes.preferences.js and server/routes.scraper.js (both plain Node, no TS
+// loader) rather than imported — same convention as SCRAPED_JOB_STATUSES etc.
+export const SCRAPER_PORTAL_IDS = ['france_travail', 'arbeitnow', 'freehire', 'claude_cli'] as const;
+export type ScraperPortalId = (typeof SCRAPER_PORTAL_IDS)[number];
+
 // Singleton (not a collection like Cv/Job/Company): exactly one record, read/written
 // at a fixed server-side path, no `id`. Consumed by the job-scraping feature (see
 // ScrapedJob below) to parameterize what to search for.
@@ -208,6 +216,26 @@ export interface SearchPreferences {
   workModes: JobWorkMode[];
   minGrossAnnualSalary?: number;
   cvId?: string;
+  // Which scraper sources to query on a run — absent/undefined means "all enabled"
+  // (the implicit behavior before this field existed, kept as the default so no
+  // previously-saved preferences.json silently loses a source).
+  enabledPortals?: ScraperPortalId[];
+  // Overrides claude_cli's SCRAPER_SEARCH_MAX_BUDGET_USD env default (server/scrapers/
+  // claudeCli.js) for the Claude web-search portal's --max-budget-usd.
+  searchBudgetUsd?: number;
+  // Overrides scraperFit.js's FIT_MEDIUM_THRESHOLD (default 45) — the score below
+  // which a qualified candidate becomes fit:'low' and is auto-dismissed.
+  autoDismissBelowScore?: number;
+  // France Travail OAuth2 client-credentials (server/scrapers/franceTravail.js),
+  // entered in-app instead of requiring FRANCE_TRAVAIL_CLIENT_ID/_SECRET env vars.
+  // The client id is plain (round-trips through GET like every other field above);
+  // the secret never does — see franceTravailClientSecretConfigured below and
+  // services/preferencesService.ts's SavePreferencesInput for the write-only field
+  // that sets it.
+  franceTravailClientId?: string;
+  // Server-computed, GET-only: whether a client secret is currently stored, without
+  // ever reporting the secret itself.
+  franceTravailClientSecretConfigured?: boolean;
   updatedAt: string | null; // ISO; null until the first save ever succeeds
 }
 
@@ -337,11 +365,47 @@ export interface AiCall {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * One tool call within a `search_all` (claude_cli) run's step trace — captured
+ * live in server/scrapers/claudeCli.js's runClaudeStreaming as WebSearch/WebFetch
+ * tool_use/tool_result NDJSON events arrive, mirroring what a LangGraph/LangSmith
+ * trace view shows for a multi-tool agentic run.
+ */
+export interface AiCallStep {
+  seq: number;
+  at: string; // ISO
+  tool: string; // 'WebSearch' | 'WebFetch'
+  input?: Record<string, unknown>; // e.g. {query} or {url}
+  status: 'pending' | 'done' | 'failed';
+  resultSnippet?: string;
+}
+
+/**
+ * Full detail for one AiCall — fetched lazily (GET /observability/calls/:id) only
+ * when a user opens a call's row, never included in the polled list (see
+ * server/observabilityStore.js's LIST_COLUMNS) so that stays cheap.
+ */
+export interface AiCallDetail extends AiCall {
+  prompt?: string;
+  responseText?: string;
+  errorDetail?: string; // raw diagnostic text (stdout/stderr/JSON envelope) — distinct from the short errorMessage
+  stepTrace?: AiCallStep[]; // only ever set for search_all
+}
+
+export interface AiCallStatsBreakdown {
+  calls: number;
+  tokens: number;
+  costUsd: number;
+  avgDurationMs: number;
+  errors: number;
+}
+
 export interface AiCallStats {
   totalCalls: number;
   totalTokens: number;
+  totalCostUsd: number;
   avgDurationMs: number;
   errorRate: number; // 0-1
-  byProvider: Record<string, { calls: number; tokens: number; errors: number }>;
-  byOperation: Record<string, { calls: number; tokens: number; errors: number }>;
+  byProvider: Record<string, AiCallStatsBreakdown>;
+  byOperation: Record<string, AiCallStatsBreakdown>;
 }

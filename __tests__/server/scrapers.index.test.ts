@@ -126,3 +126,67 @@ describe('runScrape — single-shot portals', () => {
         );
     });
 });
+
+// `enabledPortalIds` — from the user's own SearchPreferences.enabledPortals — composes
+// with, rather than replaces, the existing NODE_ENV/SCRAPER_PROVIDER fake-mode gate.
+describe('runScrape — enabledPortalIds', () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    beforeEach(() => {
+        process.env.NODE_ENV = 'development';
+    });
+    afterEach(() => {
+        process.env.NODE_ENV = originalNodeEnv;
+    });
+
+    it('omitting enabledPortalIds keeps every non-fake-gated portal running, unchanged from before this option existed', async () => {
+        await (runScrape as (input: { jobTitles: string[]; locations: string[] }) => Promise<unknown>)({
+            jobTitles: ['QA Engineer'],
+            locations: [],
+        });
+        expect(franceTravailSearch).toHaveBeenCalled();
+        expect(arbeitnowSearch).toHaveBeenCalled();
+        expect(freehireSearch).toHaveBeenCalled();
+        expect(claudeCliSearchAll).toHaveBeenCalled();
+    });
+
+    it('excludes a portal not listed in enabledPortalIds from both the per-query loop and the single-shot loop', async () => {
+        const result = await (runScrape as (input: {
+            jobTitles: string[];
+            locations: string[];
+            enabledPortalIds: string[];
+        }) => Promise<{ portalReport: { portal: string }[] }>)({
+            jobTitles: ['QA Engineer'],
+            locations: [],
+            enabledPortalIds: ['arbeitnow', 'freehire'],
+        });
+
+        expect(franceTravailSearch).not.toHaveBeenCalled();
+        expect(claudeCliSearchAll).not.toHaveBeenCalled();
+        expect(arbeitnowSearch).toHaveBeenCalled();
+        expect(freehireSearch).toHaveBeenCalled();
+        expect(result.portalReport.map((p) => p.portal).sort()).toEqual(['arbeitnow', 'freehire']);
+    });
+
+    it('an empty enabledPortalIds array disables every portal', async () => {
+        await (runScrape as (input: {
+            jobTitles: string[];
+            locations: string[];
+            enabledPortalIds: string[];
+        }) => Promise<unknown>)({ jobTitles: ['QA Engineer'], locations: [], enabledPortalIds: [] });
+
+        expect(franceTravailSearch).not.toHaveBeenCalled();
+        expect(arbeitnowSearch).not.toHaveBeenCalled();
+        expect(freehireSearch).not.toHaveBeenCalled();
+        expect(claudeCliSearchAll).not.toHaveBeenCalled();
+    });
+
+    it('forwards searchBudgetUsd to the single-shot portal as maxBudgetUsd', async () => {
+        await (runScrape as (input: {
+            jobTitles: string[];
+            locations: string[];
+            searchBudgetUsd: number;
+        }) => Promise<unknown>)({ jobTitles: ['QA Engineer'], locations: [], searchBudgetUsd: 1.5 });
+
+        expect(claudeCliSearchAll).toHaveBeenCalledWith(expect.objectContaining({ maxBudgetUsd: 1.5 }));
+    });
+});

@@ -101,6 +101,27 @@ describe('POST /api/scraper/run', () => {
     expect(second.body.created).toHaveLength(0);
   });
 
+  it('excludes the fake portal — and produces no candidates — when preferences.enabledPortals excludes it', async () => {
+    // 'fake' isn't itself a user-selectable id (server/routes.preferences.js's
+    // enabledPortals whitelist is the 4 real portal ids from types.ts's
+    // SCRAPER_PORTAL_IDS), so listing any subset of real ids here still excludes
+    // 'fake' from runScrape's filter — an indirect but real end-to-end check that
+    // the preference reaches runScrape and actually filters.
+    await request(app).put('/api/preferences').send({ jobTitles: ['QA Engineer'], locations: ['Paris'], enabledPortals: ['arbeitnow'] });
+    const res = await request(app).post('/api/scraper/run');
+    expect(res.status).toBe(200);
+    expect(res.body.created).toEqual([]);
+    expect(res.body.portalReport).toEqual([]);
+  });
+
+  it('omitting enabledPortals keeps the fake portal running, unchanged from before this preference existed', async () => {
+    await request(app).put('/api/preferences').send({ jobTitles: ['QA Engineer'], locations: ['Paris'] });
+    const res = await request(app).post('/api/scraper/run');
+    expect(res.status).toBe(200);
+    expect(res.body.portalReport).toEqual(expect.arrayContaining([expect.objectContaining({ portal: 'fake' })]));
+    candidateIdsToClean.push(...res.body.created.map((c: { id: string }) => c.id));
+  });
+
   it('uses jobTitles from the request body instead of preferences when provided (AI-expanded keyword list)', async () => {
     // Preferences are deliberately left empty (see afterEach) — the override alone
     // must be enough to run, and must not be rejected as "preferences_incomplete".

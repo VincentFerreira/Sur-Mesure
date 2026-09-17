@@ -18,6 +18,7 @@ import { isLikelyRelevant } from './scraperRelevance.js';
 import { startRun, endRun, getProgress } from './scraperProgress.js';
 import { extractDepartment, isRemoteLocation, titleCaseIfAllCaps, companyOrFallback, decodeHtmlEntities } from './scraperNormalize.js';
 import * as claudeCli from './scrapers/claudeCli.js';
+import * as franceTravail from './scrapers/franceTravail.js';
 import * as fake from './scrapers/fake.js';
 
 const isValidId = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id);
@@ -41,8 +42,24 @@ function errorBody(code, message) {
     return { error: { code, message } };
 }
 
+// Mirrors types.ts's SCRAPER_PORTAL_IDS — duplicated, not imported, same reason as
+// SCRAPED_JOB_STATUSES above (plain Node, no TS loader).
+const SCRAPER_PORTAL_IDS = ['france_travail', 'arbeitnow', 'freehire', 'claude_cli'];
+
 function defaultPreferences() {
-    return { jobTitles: [], locations: [], workModes: [], minGrossAnnualSalary: undefined, cvId: undefined, updatedAt: null };
+    return {
+        jobTitles: [],
+        locations: [],
+        workModes: [],
+        minGrossAnnualSalary: undefined,
+        cvId: undefined,
+        enabledPortals: [...SCRAPER_PORTAL_IDS],
+        searchBudgetUsd: undefined,
+        autoDismissBelowScore: undefined,
+        franceTravailClientId: undefined,
+        franceTravailClientSecret: undefined,
+        updatedAt: null,
+    };
 }
 
 async function readPreferences(preferencesFilePath) {
@@ -109,11 +126,19 @@ export function createScraperRouter({ candidatesDb, jobsDir, preferencesFilePath
             // worth polling for. startRun() also clears any stale events from a
             // previous run.
             startRun();
+            // In-app credentials (SearchPreferences.franceTravailClientId/_ClientSecret)
+            // take priority over FRANCE_TRAVAIL_CLIENT_ID/_SECRET env vars when set — see
+            // franceTravail.js's configureCredentials. Always called, even with both
+            // undefined, so a credential cleared via Preferences actually stops being
+            // used instead of the module still holding a stale override from an earlier run.
+            franceTravail.configureCredentials(preferences.franceTravailClientId, preferences.franceTravailClientSecret);
             let results, portalReport;
             try {
                 ({ results, portalReport } = await runScrape({
                     jobTitles,
                     locations: preferences.locations,
+                    enabledPortalIds: preferences.enabledPortals,
+                    searchBudgetUsd: preferences.searchBudgetUsd,
                 }));
             } finally {
                 endRun();
@@ -235,9 +260,10 @@ export function createScraperRouter({ candidatesDb, jobsDir, preferencesFilePath
         if (candidates.length === 0 || jobTitles.length === 0) return res.json({ results: {} });
         try {
             const rejectionMemory = listRejectionReasons(candidatesDb, { limit: REJECTION_MEMORY_LIMIT });
+            const preferences = await readPreferences(preferencesFilePath);
             const results = useFakeAi()
-                ? await fake.qualifyAll(candidates, jobTitles, locations, cvText, workModes, rejectionMemory)
-                : await claudeCli.qualifyAll(candidates, jobTitles, locations, cvText, workModes, rejectionMemory);
+                ? await fake.qualifyAll(candidates, jobTitles, locations, cvText, workModes, rejectionMemory, preferences.autoDismissBelowScore)
+                : await claudeCli.qualifyAll(candidates, jobTitles, locations, cvText, workModes, rejectionMemory, preferences.autoDismissBelowScore);
             res.json({ results });
         } catch (err) {
             res.status(500).json(errorBody('internal_error', err.message));

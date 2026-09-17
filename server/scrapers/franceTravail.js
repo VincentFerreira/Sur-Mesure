@@ -1,9 +1,11 @@
 // Portal module for France Travail's official "Offres d'emploi v2" API
 // (https://francetravail.io) — OAuth2 client-credentials, plain JSON, no HTML
-// parsing, no ToS risk. Requires an app registered on francetravail.io granting
-// FRANCE_TRAVAIL_CLIENT_ID / FRANCE_TRAVAIL_CLIENT_SECRET (read from process.env only,
-// server-side — never exposed to the browser bundle, unlike the AI provider keys in
-// vite.config.ts's `define()`, since these are real OAuth secrets).
+// parsing, no ToS risk. Requires an app registered on francetravail.io granting a
+// client id/secret — either entered in-app (SearchPreferences.franceTravailClientId/
+// _ClientSecret, see configureCredentials below) or, as a fallback, the
+// FRANCE_TRAVAIL_CLIENT_ID / FRANCE_TRAVAIL_CLIENT_SECRET env vars. Both paths are
+// server-side only — the secret is never exposed to the browser bundle the way the AI
+// provider keys are in vite.config.ts's `define()`, since this is a real OAuth secret.
 import { fetchWithBackoff } from './httpUtils.js';
 
 export const id = 'france_travail';
@@ -24,13 +26,28 @@ const MAX_RESULTS = 50;
 // re-authenticating on every single search call within one scrape run.
 let cachedToken = null;
 
+// Set once per scrape run (server/routes.scraper.js's POST /run, before calling
+// runScrape) from the user's own SearchPreferences — entered in-app instead of
+// requiring the env vars below to be set at deploy time. Takes priority over the env
+// vars when present, so an in-app value always wins; falls back to them otherwise
+// (e.g. a Docker deployment that still prefers env-based config). Always clears
+// cachedToken: credentials can change between runs, and reusing a token fetched under
+// different credentials would be wrong even though it hasn't expired yet.
+let overrideClientId = null;
+let overrideClientSecret = null;
+export function configureCredentials(clientId, clientSecret) {
+    overrideClientId = clientId || null;
+    overrideClientSecret = clientSecret || null;
+    cachedToken = null;
+}
+
 async function getAccessToken() {
     if (cachedToken && cachedToken.expiresAt > Date.now() + 5000) {
         return cachedToken.accessToken;
     }
 
-    const clientId = process.env.FRANCE_TRAVAIL_CLIENT_ID;
-    const clientSecret = process.env.FRANCE_TRAVAIL_CLIENT_SECRET;
+    const clientId = overrideClientId || process.env.FRANCE_TRAVAIL_CLIENT_ID;
+    const clientSecret = overrideClientSecret || process.env.FRANCE_TRAVAIL_CLIENT_SECRET;
     if (!clientId || !clientSecret) {
         throw new Error('FRANCE_TRAVAIL_CLIENT_ID / FRANCE_TRAVAIL_CLIENT_SECRET are not configured');
     }

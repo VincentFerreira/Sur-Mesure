@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { openObservabilityDb, listCalls } from '../../server/observabilityStore.js';
+import { openObservabilityDb, listCalls, getCallDetail } from '../../server/observabilityStore.js';
 import { getProgress, startRun } from '../../server/scraperProgress.js';
 
 const mockExecFile = vi.fn();
@@ -117,6 +117,14 @@ describe('searchAll (claudeCli)', () => {
         const budgetIndex = args.indexOf('--max-budget-usd');
         expect(budgetIndex).toBeGreaterThan(-1);
         expect(Number(args[budgetIndex + 1])).toBeGreaterThan(0);
+    });
+
+    it('uses a custom maxBudgetUsd when the caller provides one, instead of the env-derived default', async () => {
+        mockSpawn.mockReturnValue(makeFakeChild([resultEvent('[]')]));
+        await searchAll({ jobTitles: ['QA Engineer'], locations: [], maxBudgetUsd: 0.75 });
+        const [, args] = mockSpawn.mock.calls[0];
+        const budgetIndex = args.indexOf('--max-budget-usd');
+        expect(args[budgetIndex + 1]).toBe('0.75');
     });
 
     it('never steers the search toward a site known to block automated fetches (found via live testing: welcometothejungle.com/apec.fr both fail to fetch)', async () => {
@@ -270,7 +278,11 @@ describe('searchAll live progress (claudeCli)', () => {
         expect(events[0]).toMatchObject({ message: 'Recherche : QA Engineer Paris', status: 'pending' });
     });
 
-    it('pushes a "done" event for a WebFetch that succeeds', async () => {
+    // The "done" line is deliberately worded differently from the "pending" line for
+    // the same call — found via live testing (a user report) that identical text for
+    // both reads as a literal duplicate call once you strip the icon (e.g. a plain
+    // copy-paste of the feed), when it's actually one call shown at two points in time.
+    it('pushes a "done" event for a WebFetch that succeeds, worded differently from the pending line', async () => {
         mockSpawn.mockReturnValue(
             makeFakeChild([
                 toolUseEvent('t1', 'WebFetch', { url: 'https://example.test/jobs/1' }),
@@ -280,13 +292,12 @@ describe('searchAll live progress (claudeCli)', () => {
         );
         await searchAll({ jobTitles: ['QA Engineer'], locations: [] });
         const { events } = getProgress();
-        expect(events).toEqual([
-            { seq: events[0].seq, at: events[0].at, message: 'Vérification : example.test', status: 'pending' },
-            { seq: events[1].seq, at: events[1].at, message: 'Vérification : example.test', status: 'done' },
-        ]);
+        expect(events[0]).toMatchObject({ message: 'Vérification : example.test', status: 'pending' });
+        expect(events[1]).toMatchObject({ message: 'Page vérifiée : example.test', status: 'done' });
+        expect(events[1].message).not.toBe(events[0].message);
     });
 
-    it('pushes a "failed" event for a WebFetch that 403s', async () => {
+    it('pushes a "failed" event for a WebFetch that 403s, naming the HTTP status', async () => {
         mockSpawn.mockReturnValue(
             makeFakeChild([
                 toolUseEvent('t1', 'WebFetch', { url: 'https://www.welcometothejungle.com/jobs/1' }),
@@ -296,7 +307,21 @@ describe('searchAll live progress (claudeCli)', () => {
         );
         await searchAll({ jobTitles: ['QA Engineer'], locations: [] });
         const { events } = getProgress();
-        expect(events[1].status).toBe('failed');
+        expect(events[1]).toMatchObject({ message: 'Échec (HTTP 403) : www.welcometothejungle.com', status: 'failed' });
+    });
+
+    it('pushes a "done" event for a WebSearch that succeeds, naming the result count instead of repeating the query', async () => {
+        mockSpawn.mockReturnValue(
+            makeFakeChild([
+                toolUseEvent('t1', 'WebSearch', { query: 'QA Engineer Paris' }),
+                toolResultEvent('t1', 'Web search results: [{"url":"https://a"},{"url":"https://b"}]'),
+                resultEvent('[]'),
+            ])
+        );
+        await searchAll({ jobTitles: ['QA Engineer'], locations: [] });
+        const { events } = getProgress();
+        expect(events[0]).toMatchObject({ message: 'Recherche : QA Engineer Paris', status: 'pending' });
+        expect(events[1]).toMatchObject({ message: '→ 2 résultats pour : QA Engineer Paris', status: 'done' });
     });
 });
 
@@ -352,6 +377,25 @@ describe('qualifyAll (claudeCli)', () => {
         const [, args] = mockExecFile.mock.calls[0];
         const toolsIndex = args.indexOf('--tools');
         expect(args[toolsIndex + 1]).toBe('');
+    });
+
+    it('respects a custom mediumThreshold (SearchPreferences.autoDismissBelowScore) instead of the default 45', async () => {
+        mockExecFile.mockResolvedValue({
+            stdout: cliJsonResult(JSON.stringify({ results: [{ id: '1', score: 60, signals: [] }] })),
+        });
+        const defaultResult = await qualifyAll([{ id: '1', title: 'QA Engineer', company: 'Acme' }], ['QA Engineer'], [], undefined);
+        expect(defaultResult['1'].fit).toBe('medium'); // 60 >= default 45
+
+        const raisedResult = await qualifyAll(
+            [{ id: '1', title: 'QA Engineer', company: 'Acme' }],
+            ['QA Engineer'],
+            [],
+            undefined,
+            [],
+            [],
+            65
+        );
+        expect(raisedResult['1'].fit).toBe('low'); // 60 < custom 65
     });
 
     it('includes an ACCEPTABLE WORK MODES section in the prompt when work modes are given', async () => {
@@ -527,5 +571,112 @@ describe('observability logging (claudeCli)', () => {
         configureObservability(null);
         mockSpawn.mockReturnValue(makeFakeChild([resultEvent('[]')]));
         await expect(searchAll({ jobTitles: ['QA Engineer'], locations: [] })).resolves.toEqual([]);
+    });
+});
+
+describe('observability full prompt/response/error/step-trace capture (claudeCli)', () => {
+    let tempDir: string;
+    let observabilityDb: ReturnType<typeof openObservabilityDb>;
+
+    beforeEach(() => {
+        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yarb-claudecli-detail-test-'));
+        observabilityDb = openObservabilityDb(path.join(tempDir, 'observability.sqlite'));
+        configureObservability(observabilityDb);
+    });
+
+    afterEach(() => {
+        configureObservability(null);
+        observabilityDb.close();
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it('runClaude (buffered) success logs the full prompt and responseText', async () => {
+        mockExecFile.mockResolvedValue({ stdout: cliJsonResult(JSON.stringify({ keywords: ['SDET'] })) });
+        await expandKeywords(['QA Engineer']);
+        const [row] = listCalls(observabilityDb);
+        const detail = getCallDetail(observabilityDb, row.id)!;
+        expect(detail.prompt).toContain('QA Engineer');
+        expect(detail.responseText).toBe(JSON.stringify({ keywords: ['SDET'] }));
+    });
+
+    it('runClaude logs the raw unparsable stdout as errorDetail', async () => {
+        mockExecFile.mockResolvedValue({ stdout: 'not json at all' });
+        await expandKeywords(['QA Engineer']);
+        const [row] = listCalls(observabilityDb);
+        const detail = getCallDetail(observabilityDb, row.id)!;
+        expect(detail.errorDetail).toBe('not json at all');
+    });
+
+    it('runClaude logs the full JSON error envelope as errorDetail when the CLI reports is_error', async () => {
+        mockExecFile.mockResolvedValue({ stdout: JSON.stringify({ is_error: true, subtype: 'error_max_turns', result: null }) });
+        await expandKeywords(['QA Engineer']);
+        const [row] = listCalls(observabilityDb);
+        const detail = getCallDetail(observabilityDb, row.id)!;
+        expect(JSON.parse(detail.errorDetail)).toMatchObject({ is_error: true, subtype: 'error_max_turns' });
+    });
+
+    it('runClaude captures .stdout/.stderr from an exec error into errorDetail', async () => {
+        mockExecFile.mockRejectedValue(Object.assign(new Error('Command failed'), { stdout: 'partial output', stderr: 'some warning' }));
+        await expandKeywords(['QA Engineer']);
+        const [row] = listCalls(observabilityDb);
+        const detail = getCallDetail(observabilityDb, row.id)!;
+        expect(detail.errorDetail).toContain('partial output');
+        expect(detail.errorDetail).toContain('some warning');
+    });
+
+    it('runClaudeStreaming success persists an ordered stepTrace as its own field, not inside metadata', async () => {
+        mockSpawn.mockReturnValue(
+            makeFakeChild([
+                toolUseEvent('t1', 'WebSearch', { query: 'QA Engineer Paris' }),
+                toolResultEvent('t1', 'Web search results: [{"url":"https://a"}]'),
+                toolUseEvent('t2', 'WebFetch', { url: 'https://example.test/1' }),
+                toolResultEvent('t2', 'The server returned HTTP 404 Not Found.'),
+                resultEvent('[]'),
+            ])
+        );
+        await searchAll({ jobTitles: ['QA Engineer'], locations: [] });
+        const [row] = listCalls(observabilityDb);
+        const detail = getCallDetail(observabilityDb, row.id)!;
+        expect(detail.metadata).not.toHaveProperty('steps');
+        expect(detail.metadata).not.toHaveProperty('stepTrace');
+        expect(detail.stepTrace).toEqual([
+            { seq: 1, at: expect.any(String), tool: 'WebSearch', input: { query: 'QA Engineer Paris' }, status: 'done', resultSnippet: expect.stringContaining('https://a') },
+            { seq: 2, at: expect.any(String), tool: 'WebFetch', input: { url: 'https://example.test/1' }, status: 'failed', resultSnippet: expect.stringContaining('HTTP 404') },
+        ]);
+        expect(detail.prompt).toContain('QA Engineer');
+        expect(detail.responseText).toBe('[]');
+    });
+
+    it('runClaudeStreaming close-without-resultEvent logs the full stderr as errorDetail and the steps that ran before it died', async () => {
+        const stdout = new Readable({ read() {} });
+        const stderr = new Readable({ read() {} });
+        const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: Readable };
+        child.stdout = stdout;
+        child.stderr = stderr;
+        mockSpawn.mockReturnValue(child);
+
+        queueMicrotask(async () => {
+            stdout.push(`${JSON.stringify(toolUseEvent('t1', 'WebSearch', { query: 'QA Engineer' }))}\n`);
+            await new Promise((r) => setImmediate(r));
+            stderr.push('budget exceeded after 14 tool calls\n');
+            stdout.push(null);
+            stderr.push(null);
+            child.emit('close', 1);
+        });
+
+        await expect(searchAll({ jobTitles: ['QA Engineer'], locations: [] })).rejects.toThrow('claude CLI invocation failed');
+        const [row] = listCalls(observabilityDb);
+        const detail = getCallDetail(observabilityDb, row.id)!;
+        expect(detail.errorDetail).toContain('budget exceeded after 14 tool calls');
+        expect(detail.stepTrace).toHaveLength(1);
+        expect(detail.stepTrace[0]).toMatchObject({ tool: 'WebSearch', status: 'pending' });
+    });
+
+    it('runClaudeStreaming resultEvent.is_error logs the full envelope as errorDetail', async () => {
+        mockSpawn.mockReturnValue(makeFakeChild([{ type: 'result', is_error: true, subtype: 'error_max_turns', result: null }]));
+        await expect(searchAll({ jobTitles: ['QA Engineer'], locations: [] })).rejects.toThrow('claude CLI reported an error');
+        const [row] = listCalls(observabilityDb);
+        const detail = getCallDetail(observabilityDb, row.id)!;
+        expect(JSON.parse(detail.errorDetail)).toMatchObject({ is_error: true, subtype: 'error_max_turns' });
     });
 });

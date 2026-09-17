@@ -1,4 +1,4 @@
-import { AiCall, AiCallOperation, AiCallProvider, AiCallStats, AiCallStatus } from '../types';
+import { AiCall, AiCallDetail, AiCallOperation, AiCallProvider, AiCallStats, AiCallStatus, AiCallStep } from '../types';
 import { apiFetch } from './apiClient';
 
 export interface LogAiCallInput {
@@ -13,6 +13,10 @@ export interface LogAiCallInput {
   totalTokens?: number;
   finishReason?: string;
   metadata?: Record<string, unknown>;
+  prompt?: string;
+  responseText?: string;
+  errorDetail?: string;
+  stepTrace?: AiCallStep[];
 }
 
 // Fire-and-forget: called right after a client-side Gemini/Claude SDK call
@@ -30,6 +34,7 @@ export interface ListAiCallsParams {
   sinceRowId?: number;
   provider?: AiCallProvider;
   status?: AiCallStatus;
+  operation?: AiCallOperation;
 }
 
 export async function listAiCalls(params: ListAiCallsParams = {}): Promise<(AiCall & { rowId: number })[]> {
@@ -38,6 +43,7 @@ export async function listAiCalls(params: ListAiCallsParams = {}): Promise<(AiCa
   if (params.sinceRowId !== undefined) qs.set('sinceRowId', String(params.sinceRowId));
   if (params.provider) qs.set('provider', params.provider);
   if (params.status) qs.set('status', params.status);
+  if (params.operation) qs.set('operation', params.operation);
   const suffix = qs.toString() ? `?${qs.toString()}` : '';
   return apiFetch<(AiCall & { rowId: number })[]>(`/observability/calls${suffix}`, undefined, 'Failed to list AI calls');
 }
@@ -45,4 +51,11 @@ export async function listAiCalls(params: ListAiCallsParams = {}): Promise<(AiCa
 export async function fetchAiCallStats(rangeStart?: string): Promise<AiCallStats> {
   const qs = rangeStart ? `?rangeStart=${encodeURIComponent(rangeStart)}` : '';
   return apiFetch<AiCallStats>(`/observability/stats${qs}`, undefined, 'Failed to fetch AI call stats');
+}
+
+// Fetched lazily, only when a user opens a call's row in the Observability page — the
+// polled list (listAiCalls above) never includes prompt/responseText/errorDetail/
+// stepTrace (see server/observabilityStore.js's LIST_COLUMNS).
+export async function fetchAiCallDetail(id: string): Promise<AiCallDetail> {
+  return apiFetch<AiCallDetail>(`/observability/calls/${encodeURIComponent(id)}`, undefined, 'Failed to fetch AI call detail');
 }

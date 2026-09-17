@@ -54,8 +54,23 @@ function buildSingleShotRegistry() {
 // network error, upstream outage, missing CLI binary) is caught and recorded in
 // `portalReport` rather than aborting the others — mirrors ai-job-search's
 // job-scraper/SKILL.md Step 1: "one portal fails, continue with the rest."
-export async function runScrape({ jobTitles = [], locations = [] }) {
-    const portals = buildRegistry().filter((p) => p.enabled);
+// `enabledPortalIds` — from the user's own SearchPreferences.enabledPortals (see
+// server/routes.scraper.js) — composes with, rather than replaces, the existing
+// fake/test `.enabled` gate: a portal must pass both to actually run. Undefined means
+// "no user-facing filter," i.e. today's behavior (every non-fake-gated portal runs).
+// `searchBudgetUsd` is forwarded to every single-shot portal's run() — currently only
+// claudeCli.searchAll reads it, a future single-shot portal that doesn't simply ignores it.
+//
+// JSDoc-typed (unlike the rest of this file) because TS's checkJs inference for a
+// destructured options object with only array-literal defaults (`= []`) infers
+// `never[]`, not `string[]` — see server/observabilityStore.js's listCalls for the
+// same pattern/reasoning.
+/**
+ * @param {{ jobTitles?: string[], locations?: string[], enabledPortalIds?: string[], searchBudgetUsd?: number }} [options]
+ */
+export async function runScrape({ jobTitles = [], locations = [], enabledPortalIds, searchBudgetUsd } = {}) {
+    const isPortalEnabled = (p) => p.enabled && (!enabledPortalIds || enabledPortalIds.includes(p.id));
+    const portals = buildRegistry().filter(isPortalEnabled);
     const queries = jobTitles.length > 0 ? jobTitles : [undefined];
     const locationList = locations.length > 0 ? locations : [undefined];
 
@@ -82,9 +97,9 @@ export async function runScrape({ jobTitles = [], locations = [] }) {
         portalReport.push({ portal: portal.id, count, ...(error ? { error } : {}) });
     }
 
-    for (const portal of buildSingleShotRegistry().filter((p) => p.enabled)) {
+    for (const portal of buildSingleShotRegistry().filter(isPortalEnabled)) {
         try {
-            const found = await portal.run({ jobTitles, locations });
+            const found = await portal.run({ jobTitles, locations, maxBudgetUsd: searchBudgetUsd });
             for (const item of found) {
                 results.push({ ...item, portal: portal.id });
             }

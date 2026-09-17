@@ -36,7 +36,7 @@ export function configureObservability(db) {
 
 // Never let a logging failure break the actual scrape/qualify/search flow — this is
 // purely observational.
-function logCall({ operation, model, startedAt, status, errorMessage, usage, costUsd, metadata }) {
+function logCall({ operation, model, startedAt, status, errorMessage, usage, costUsd, metadata, prompt, responseText, errorDetail, stepTrace }) {
     if (!observabilityDb) return;
     try {
         insertCall(observabilityDb, {
@@ -53,6 +53,10 @@ function logCall({ operation, model, startedAt, status, errorMessage, usage, cos
             totalTokens: usage ? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0) : undefined,
             costUsd,
             metadata,
+            prompt,
+            responseText,
+            errorDetail,
+            stepTrace,
         });
     } catch (err) {
         console.error('Failed to log claude CLI call to the observability store:', err);
@@ -78,6 +82,11 @@ const DESCRIPTION_EXCERPT_LENGTH = 400;
 // run's legitimate cost varies with how many job titles are searched at once.
 const SEARCH_MAX_BUDGET_USD = Number(process.env.SCRAPER_SEARCH_MAX_BUDGET_USD ?? 3);
 const MAX_PROGRESS_MESSAGE_LENGTH = 140;
+// Per-step resultSnippet in the observability step trace (see runClaudeStreaming) — a
+// raw WebFetch page can be huge; this is generous enough to diagnose a failure (an
+// HTTP status line, a blocked-page message) without ballooning the trace across
+// dozens of steps. observabilityStore.js applies its own final structural bound too.
+const STEP_RESULT_SNIPPET_LENGTH = 2_000;
 
 function stripCodeFence(text) {
     const trimmed = (text ?? '').trim();
@@ -117,10 +126,22 @@ async function runClaude(prompt, tools, operation, metadata) {
                 '--no-session-persistence',
                 '--strict-mcp-config',
             ],
-            { timeout: TIMEOUT_MS, maxBuffer: MAX_BUFFER, env: cliEnv }
+            // stdin explicitly closed ('ignore'), not left as Node's default open pipe:
+            // the CLI peeks at stdin to detect piped input, and an open-but-never-
+            // written-to pipe makes it wait ~3s before giving up and printing a
+            // "no stdin data received" warning to stderr — found via a live scrape
+            // where that warning line, having nothing else in stderr to compete with,
+            // was mistaken for the actual failure. `-p` never reads stdin itself, so
+            // there's nothing to lose by closing it up front.
+            { timeout: TIMEOUT_MS, maxBuffer: MAX_BUFFER, env: cliEnv, stdio: ['ignore', 'pipe', 'pipe'] }
         ));
     } catch (err) {
-        logCall({ operation, startedAt, status: 'error', errorMessage: `claude CLI invocation failed: ${err.message}`, metadata });
+        // execFile's error can carry .stdout/.stderr when the child actually ran and
+        // produced output before a non-zero exit (not on e.g. ENOENT or a timeout with
+        // no output) — capture both when present instead of just err.message, since
+        // that's frequently the real diagnostic for "what actually happened."
+        const errorDetail = [err.stdout, err.stderr].filter(Boolean).join('\n---stderr---\n') || undefined;
+        logCall({ operation, startedAt, status: 'error', errorMessage: `claude CLI invocation failed: ${err.message}`, metadata, prompt, errorDetail });
         throw new Error(`claude CLI invocation failed: ${err.message}`);
     }
 
@@ -128,19 +149,22 @@ async function runClaude(prompt, tools, operation, metadata) {
     try {
         payload = JSON.parse(stdout);
     } catch {
-        logCall({ operation, startedAt, status: 'error', errorMessage: 'claude CLI returned unparsable output', metadata });
+        // The literal raw stdout that failed to parse — previously discarded entirely.
+        logCall({ operation, startedAt, status: 'error', errorMessage: 'claude CLI returned unparsable output', metadata, prompt, errorDetail: stdout });
         throw new Error('claude CLI returned unparsable output');
     }
     if (payload.is_error) {
         const errorMessage = payload.result ?? payload.subtype ?? 'unknown';
-        logCall({ operation, startedAt, status: 'error', errorMessage: `claude CLI reported an error: ${errorMessage}`, model: payload.model, metadata });
+        // Full envelope (is_error/subtype/result/model/usage/total_cost_usd), richer
+        // than the one-liner above.
+        logCall({ operation, startedAt, status: 'error', errorMessage: `claude CLI reported an error: ${errorMessage}`, model: payload.model, metadata, prompt, errorDetail: JSON.stringify(payload) });
         throw new Error(`claude CLI reported an error: ${errorMessage}`);
     }
     // `--output-format json`'s envelope carries more than `.result`/`.is_error` (the
     // only fields read above) — `usage`/`total_cost_usd`/`model` when the installed CLI
     // version reports them. Read defensively: a missing/renamed field must never break
     // the call, it just means that call's row has no token/cost figures.
-    logCall({ operation, startedAt, status: 'success', model: payload.model, usage: payload.usage, costUsd: payload.total_cost_usd, metadata });
+    logCall({ operation, startedAt, status: 'success', model: payload.model, usage: payload.usage, costUsd: payload.total_cost_usd, metadata, prompt, responseText: payload.result ?? '' });
     return payload.result ?? '';
 }
 
@@ -178,6 +202,39 @@ function toolResultText(content) {
 // redirect WebFetch didn't resolve on its own — never a false positive on genuine
 // posting content, which wouldn't contain these exact phrases.
 const FETCH_FAILURE_PATTERN = /HTTP 4\d\d|HTTP 5\d\d|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|REDIRECT DETECTED/;
+const HTTP_STATUS_PATTERN = /HTTP (\d{3})/;
+
+// Human-readable one-liner for a WebSearch/WebFetch tool_result, pushed once its
+// outcome is known — deliberately worded differently from describeToolUse's "pending"
+// line for the same call (not just distinguished by the progress event's `status`
+// icon), since a plain-text view of the feed (e.g. copy-pasted) would otherwise show
+// what reads as the exact same action twice in a row.
+function describeToolResult(name, input, resultText, failed) {
+    if (name === 'WebSearch') {
+        if (failed) return truncate(`Recherche infructueuse : ${input?.query ?? ''}`, MAX_PROGRESS_MESSAGE_LENGTH);
+        const resultCount = resultText.match(/"url"\s*:/g)?.length;
+        return truncate(
+            resultCount !== undefined
+                ? `→ ${resultCount} résultat${resultCount === 1 ? '' : 's'} pour : ${input?.query ?? ''}`
+                : `Recherche terminée : ${input?.query ?? ''}`,
+            MAX_PROGRESS_MESSAGE_LENGTH
+        );
+    }
+    if (name === 'WebFetch') {
+        let host = input?.url ?? '';
+        try {
+            host = new URL(input.url).hostname;
+        } catch {
+            // Not a valid absolute URL — fall back to the raw string above.
+        }
+        if (failed) {
+            const status = resultText.match(HTTP_STATUS_PATTERN)?.[1];
+            return truncate(`Échec${status ? ` (HTTP ${status})` : ''} : ${host}`, MAX_PROGRESS_MESSAGE_LENGTH);
+        }
+        return truncate(`Page vérifiée : ${host}`, MAX_PROGRESS_MESSAGE_LENGTH);
+    }
+    return name;
+}
 
 // Runs one `claude -p` turn in --output-format stream-json, parsing each NDJSON event
 // as it arrives (rather than buffering the whole run like runClaude above) — the only
@@ -202,16 +259,31 @@ function runClaudeStreaming(prompt, tools, operation, { maxBudgetUsd } = {}) {
                 '--strict-mcp-config',
                 ...(maxBudgetUsd ? ['--max-budget-usd', String(maxBudgetUsd)] : []),
             ],
-            { timeout: TIMEOUT_MS, env: cliEnv }
+            // stdin explicitly closed — see the matching comment on runClaude's
+            // execFileAsync call above. Same root cause here (an open, never-written
+            // pipe makes the CLI wait ~3s and warn on stderr), and more visible on this
+            // path specifically: this stderr line was the only thing captured when a
+            // real run otherwise produced no `result` event, so it got misreported as
+            // the actual failure reason instead of whatever really happened.
+            { timeout: TIMEOUT_MS, env: cliEnv, stdio: ['ignore', 'pipe', 'pipe'] }
         );
 
         let resultEvent = null;
         let webSearchCount = 0;
         let webFetchCount = 0;
         let webFetchFailures = 0;
-        // Maps a tool_use's id to its human-readable label, so the later tool_result
-        // event (which only carries the id) can be narrated with the same wording.
-        const labelByToolUseId = new Map();
+        // The observability step trace (LangGraph-style: one entry per WebSearch/
+        // WebFetch tool call, in order) — logged as its own top-level `stepTrace` field
+        // (not inside `metadata`, which stays small so the polled list stays cheap).
+        // Kept whether the run ultimately succeeds or fails: "which searches/fetches
+        // happened right before it died" is itself the diagnostic for a failure.
+        const steps = [];
+        // Maps a tool_use's id to its step object (pushed into `steps` above), so the
+        // later tool_result event (which only carries the id) can update that same
+        // step's status/resultSnippet in place, and be narrated via describeToolResult
+        // for the live progress feed — with its own wording, not a repeat of the
+        // "pending" line pushed below.
+        const pendingByToolUseId = new Map();
         let stderrText = '';
 
         child.stderr.on('data', (chunk) => {
@@ -233,18 +305,22 @@ function runClaudeStreaming(prompt, tools, operation, { maxBudgetUsd } = {}) {
                     if (block.type !== 'tool_use' || (block.name !== 'WebSearch' && block.name !== 'WebFetch')) continue;
                     if (block.name === 'WebSearch') webSearchCount += 1;
                     else webFetchCount += 1;
-                    const label = describeToolUse(block.name, block.input);
-                    labelByToolUseId.set(block.id, label);
-                    pushEvent(label, 'pending');
+                    const step = { seq: steps.length + 1, at: new Date().toISOString(), tool: block.name, input: block.input, status: 'pending' };
+                    steps.push(step);
+                    pendingByToolUseId.set(block.id, step);
+                    pushEvent(describeToolUse(block.name, block.input), 'pending');
                 }
             } else if (event.type === 'user') {
                 for (const block of event.message?.content ?? []) {
                     if (block.type !== 'tool_result') continue;
-                    const label = labelByToolUseId.get(block.tool_use_id);
-                    if (!label) continue;
-                    const failed = FETCH_FAILURE_PATTERN.test(toolResultText(block.content));
+                    const step = pendingByToolUseId.get(block.tool_use_id);
+                    if (!step) continue;
+                    const resultText = toolResultText(block.content);
+                    const failed = FETCH_FAILURE_PATTERN.test(resultText);
                     if (failed) webFetchFailures += 1;
-                    pushEvent(label, failed ? 'failed' : 'done');
+                    step.status = failed ? 'failed' : 'done';
+                    step.resultSnippet = truncate(resultText, STEP_RESULT_SNIPPET_LENGTH);
+                    pushEvent(describeToolResult(step.tool, step.input, resultText, failed), failed ? 'failed' : 'done');
                 }
             } else if (event.type === 'result') {
                 resultEvent = event;
@@ -252,20 +328,36 @@ function runClaudeStreaming(prompt, tools, operation, { maxBudgetUsd } = {}) {
         });
 
         child.on('error', (err) => {
-            logCall({ operation, startedAt, status: 'error', errorMessage: `claude CLI invocation failed: ${err.message}` });
+            logCall({ operation, startedAt, status: 'error', errorMessage: `claude CLI invocation failed: ${err.message}`, prompt, stepTrace: steps });
             reject(new Error(`claude CLI invocation failed: ${err.message}`));
         });
 
         child.on('close', (code) => {
             if (!resultEvent) {
-                const message = stderrText.trim() || `claude CLI exited with code ${code} before returning a result`;
-                logCall({ operation, startedAt, status: 'error', errorMessage: `claude CLI invocation failed: ${message}` });
-                reject(new Error(`claude CLI invocation failed: ${message}`));
+                const fullMessage = stderrText.trim() || `claude CLI exited with code ${code} before returning a result`;
+                logCall({
+                    operation, startedAt, status: 'error',
+                    // Short summary for the table tooltip; the full stderr goes to
+                    // errorDetail — previously stderrText was squeezed into this one
+                    // field with no separate, complete copy kept anywhere.
+                    errorMessage: `claude CLI invocation failed: ${truncate(fullMessage, 300)}`,
+                    errorDetail: stderrText.trim() || undefined,
+                    prompt,
+                    stepTrace: steps,
+                });
+                reject(new Error(`claude CLI invocation failed: ${fullMessage}`));
                 return;
             }
             if (resultEvent.is_error) {
                 const errorMessage = resultEvent.result ?? resultEvent.subtype ?? 'unknown';
-                logCall({ operation, startedAt, status: 'error', errorMessage: `claude CLI reported an error: ${errorMessage}`, model: resultEvent.model });
+                logCall({
+                    operation, startedAt, status: 'error',
+                    errorMessage: `claude CLI reported an error: ${errorMessage}`,
+                    model: resultEvent.model,
+                    errorDetail: JSON.stringify(resultEvent),
+                    prompt,
+                    stepTrace: steps,
+                });
                 reject(new Error(`claude CLI reported an error: ${errorMessage}`));
                 return;
             }
@@ -289,6 +381,9 @@ function runClaudeStreaming(prompt, tools, operation, { maxBudgetUsd } = {}) {
                     webFetchCount,
                     webFetchFailures,
                 },
+                prompt,
+                responseText: resultEvent.result ?? '',
+                stepTrace: steps,
             });
             resolve(resultEvent.result ?? '');
         });
@@ -337,11 +432,13 @@ function normalizeSearchResult(item) {
 // Called once per scrape run with the full jobTitles/locations arrays (not once per
 // query like the HTTP-API portals) — a `claude -p` invocation is its own multi-second
 // process, so looping it per job title would be needlessly slow.
-export async function searchAll({ jobTitles, locations }) {
+// `maxBudgetUsd` defaults to the env-derived constant but can be overridden per-run
+// with the user's own SearchPreferences.searchBudgetUsd (see server/routes.scraper.js).
+export async function searchAll({ jobTitles, locations, maxBudgetUsd = SEARCH_MAX_BUDGET_USD }) {
     if (!jobTitles || jobTitles.length === 0) return [];
 
     const text = await runClaudeStreaming(buildSearchPrompt(jobTitles, locations), 'WebSearch,WebFetch', 'search_all', {
-        maxBudgetUsd: SEARCH_MAX_BUDGET_USD,
+        maxBudgetUsd,
     });
 
     let parsed;
@@ -456,8 +553,11 @@ function buildQualifyPrompt(jobTitles, locations, cvText, workModes, rejectionMe
 const MAX_SIGNALS = 4;
 const MAX_SIGNAL_LABEL_LENGTH = 40;
 
-/** @returns {Record<string, {fit: string, score: number, signals: {label: string, polarity: string}[]}>} */
-function toQualifyMap(results) {
+// `mediumThreshold` — see scraperFit.js's fitFromScore — lets a batch's fit tiering
+// respect the user's own SearchPreferences.autoDismissBelowScore instead of the fixed
+// default, undefined here simply means "use fitFromScore's own default."
+/** @param {number} [mediumThreshold] @returns {Record<string, {fit: string, score: number, signals: {label: string, polarity: string}[]}>} */
+function toQualifyMap(results, mediumThreshold) {
     const map = {};
     if (!Array.isArray(results)) return map;
     for (const r of results) {
@@ -469,12 +569,12 @@ function toQualifyMap(results) {
                   .slice(0, MAX_SIGNALS)
                   .map((s) => ({ label: s.label.trim().slice(0, MAX_SIGNAL_LABEL_LENGTH), polarity: s.polarity }))
             : [];
-        map[r.id] = { fit: fitFromScore(score), score, signals };
+        map[r.id] = { fit: fitFromScore(score, mediumThreshold), score, signals };
     }
     return map;
 }
 
-async function qualifyBatch(jobTitles, locations, cvText, workModes, rejectionMemory, batch) {
+async function qualifyBatch(jobTitles, locations, cvText, workModes, rejectionMemory, mediumThreshold, batch) {
     const text = await runClaude(buildQualifyPrompt(jobTitles, locations, cvText, workModes, rejectionMemory, batch), '', 'qualify', {
         batchSize: batch.length,
     });
@@ -484,7 +584,7 @@ async function qualifyBatch(jobTitles, locations, cvText, workModes, rejectionMe
     } catch {
         return {};
     }
-    return toQualifyMap(parsed.results);
+    return toQualifyMap(parsed.results, mediumThreshold);
 }
 
 // Judges each candidate against `jobTitles`/`locations`/`workModes` (pass the user's
@@ -502,8 +602,8 @@ async function qualifyBatch(jobTitles, locations, cvText, workModes, rejectionMe
 // runScrape orchestrator).
 // `rejectionMemory` — {title, company, reason}[] from listRejectionReasons — is the
 // same across every batch of one call, same as jobTitles/locations/cvText/workModes.
-/** @returns {Promise<Record<string, {fit: string, score: number, signals: {label: string, polarity: string}[]}>>} */
-export async function qualifyAll(candidates, jobTitles, locations, cvText, workModes = [], rejectionMemory = []) {
+/** @param {number} [mediumThreshold] @returns {Promise<Record<string, {fit: string, score: number, signals: {label: string, polarity: string}[]}>>} */
+export async function qualifyAll(candidates, jobTitles, locations, cvText, workModes = [], rejectionMemory = [], mediumThreshold) {
     if (!candidates || candidates.length === 0 || !jobTitles || jobTitles.length === 0) return {};
 
     const batches = [];
@@ -514,7 +614,7 @@ export async function qualifyAll(candidates, jobTitles, locations, cvText, workM
     const qualifyMap = {};
     for (const batch of batches) {
         try {
-            Object.assign(qualifyMap, await qualifyBatch(jobTitles, locations, cvText, workModes, rejectionMemory, batch));
+            Object.assign(qualifyMap, await qualifyBatch(jobTitles, locations, cvText, workModes, rejectionMemory, mediumThreshold, batch));
         } catch (err) {
             console.error(`Qualification batch failed via claude CLI (${batch.length} candidates left unfiltered):`, err);
         }

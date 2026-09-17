@@ -93,8 +93,10 @@ function rejectedSameCompany(candidate, rejectionMemory) {
     return rejectionMemory.find((r) => (r.company ?? '').trim().toLowerCase() === company);
 }
 
-/** @returns {Promise<Record<string, {fit: string, score: number, signals: {label: string, polarity: string}[]}>>} */
-export async function qualifyAll(candidates, jobTitles, locations, cvText, workModes = [], rejectionMemory = []) {
+// `mediumThreshold` mirrors claudeCli.js's qualifyAll — kept in parity so e2e (which
+// runs against this fake path) can exercise SearchPreferences.autoDismissBelowScore.
+/** @param {number} [mediumThreshold] @returns {Promise<Record<string, {fit: string, score: number, signals: {label: string, polarity: string}[]}>>} */
+export async function qualifyAll(candidates, jobTitles, locations, cvText, workModes = [], rejectionMemory = [], mediumThreshold) {
     const targetWords = new Set(jobTitles.join(' ').toLowerCase().match(/[a-z0-9]+/g) ?? []);
     const cvWords = cvText ? significantWords(cvText) : null;
     const map = {};
@@ -143,7 +145,7 @@ export async function qualifyAll(candidates, jobTitles, locations, cvText, workM
             signals.push({ label: 'Comme rejet précédent', polarity: 'negative' });
         }
 
-        map[c.id] = { fit: fitFromScore(score), score, signals: signals.slice(0, MAX_SIGNALS) };
+        map[c.id] = { fit: fitFromScore(score, mediumThreshold), score, signals: signals.slice(0, MAX_SIGNALS) };
     }
     return map;
 }

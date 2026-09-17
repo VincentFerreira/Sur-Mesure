@@ -5,9 +5,13 @@
 export const FIT_HIGH_THRESHOLD = 75;
 export const FIT_MEDIUM_THRESHOLD = 45;
 
-/** @param {number} score @returns {'high'|'medium'|'low'} */
-export function fitFromScore(score) {
+// `mediumThreshold` overrides FIT_MEDIUM_THRESHOLD (the auto-dismiss boundary — a
+// candidate below it becomes 'low' and gets auto-dismissed downstream) with the
+// user's own SearchPreferences.autoDismissBelowScore when they've set one; every
+// caller that doesn't pass one keeps today's fixed 45.
+/** @param {number} score @param {number} [mediumThreshold] @returns {'high'|'medium'|'low'} */
+export function fitFromScore(score, mediumThreshold = FIT_MEDIUM_THRESHOLD) {
     if (score >= FIT_HIGH_THRESHOLD) return 'high';
-    if (score >= FIT_MEDIUM_THRESHOLD) return 'medium';
+    if (score >= mediumThreshold) return 'medium';
     return 'low';
 }

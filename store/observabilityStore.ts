@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AiCall, AiCallProvider, AiCallStats, AiCallStatus } from '../types';
+import { AiCall, AiCallOperation, AiCallProvider, AiCallStats, AiCallStatus } from '../types';
 import { listAiCalls, fetchAiCallStats } from '../services/observabilityService';
 
 const POLL_INTERVAL_MS = 5000;
@@ -11,11 +11,13 @@ interface ObservabilityState {
   error: string | null;
   providerFilter: AiCallProvider | undefined;
   statusFilter: AiCallStatus | undefined;
+  operationFilter: AiCallOperation | undefined;
   pollHandle: ReturnType<typeof setInterval> | null;
   fetchCalls: () => Promise<void>;
   fetchStats: () => Promise<void>;
   setProviderFilter: (provider: AiCallProvider | undefined) => void;
   setStatusFilter: (status: AiCallStatus | undefined) => void;
+  setOperationFilter: (operation: AiCallOperation | undefined) => void;
   startPolling: () => void;
   stopPolling: () => void;
 }
@@ -31,13 +33,14 @@ export const useObservabilityStore = create<ObservabilityState>((set, get) => ({
   error: null,
   providerFilter: undefined,
   statusFilter: undefined,
+  operationFilter: undefined,
   pollHandle: null,
 
   fetchCalls: async () => {
     set({ loading: true, error: null });
     try {
-      const { providerFilter, statusFilter } = get();
-      const calls = await listAiCalls({ limit: 200, provider: providerFilter, status: statusFilter });
+      const { providerFilter, statusFilter, operationFilter } = get();
+      const calls = await listAiCalls({ limit: 200, provider: providerFilter, status: statusFilter, operation: operationFilter });
       set({ calls, loading: false });
     } catch {
       set({ loading: false, error: 'Unable to load AI calls. Is the server running?' });
@@ -62,6 +65,11 @@ export const useObservabilityStore = create<ObservabilityState>((set, get) => ({
 
   setStatusFilter: (status) => {
     set({ statusFilter: status });
+    get().fetchCalls();
+  },
+
+  setOperationFilter: (operation) => {
+    set({ operationFilter: operation });
     get().fetchCalls();
   },
 

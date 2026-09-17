@@ -1,6 +1,6 @@
 import express from 'express';
 import { randomUUID } from 'crypto';
-import { insertCall, listCalls, getStats } from './observabilityStore.js';
+import { insertCall, listCalls, getStats, getCallDetail } from './observabilityStore.js';
 
 // Mirrors types.ts's AI_CALL_PROVIDERS/AI_CALL_OPERATIONS/AI_CALL_STATUSES — duplicated
 // rather than imported, same as SCRAPED_JOB_STATUSES/SCRAPED_JOB_FITS in
@@ -55,6 +55,13 @@ export function createObservabilityRouter({ observabilityDb }) {
             totalTokens: typeof body.totalTokens === 'number' ? body.totalTokens : undefined,
             finishReason: typeof body.finishReason === 'string' ? body.finishReason : undefined,
             metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata : undefined,
+            // Full prompt/response/error text + step trace — no length validation here,
+            // truncation is centralized in observabilityStore.js's insertCall so every
+            // caller (this route and claudeCli.js's direct insertCall) gets it for free.
+            prompt: typeof body.prompt === 'string' ? body.prompt : undefined,
+            responseText: typeof body.responseText === 'string' ? body.responseText : undefined,
+            errorDetail: typeof body.errorDetail === 'string' ? body.errorDetail : undefined,
+            stepTrace: Array.isArray(body.stepTrace) ? body.stepTrace : undefined,
         };
 
         try {
@@ -74,7 +81,21 @@ export function createObservabilityRouter({ observabilityDb }) {
             const sinceRowId = req.query.sinceRowId ? Number(req.query.sinceRowId) : undefined;
             const provider = isValidProvider(req.query.provider) ? req.query.provider : undefined;
             const status = isValidStatus(req.query.status) ? req.query.status : undefined;
-            res.json(listCalls(observabilityDb, { limit, sinceRowId, provider, status }));
+            const operation = isValidOperation(req.query.operation) ? req.query.operation : undefined;
+            res.json(listCalls(observabilityDb, { limit, sinceRowId, provider, status, operation }));
+        } catch (err) {
+            res.status(500).json(errorBody('internal_error', err.message));
+        }
+    });
+
+    // Full detail for one call — fetched lazily by the Observability page only when a
+    // user opens a row (see observabilityStore.js's LIST_COLUMNS/getCallDetail split);
+    // includes prompt/responseText/errorDetail/stepTrace, never returned by GET /calls.
+    router.get('/calls/:id', (req, res) => {
+        try {
+            const call = getCallDetail(observabilityDb, req.params.id);
+            if (!call) return res.status(404).json(errorBody('not_found', 'No AI call with that id'));
+            res.json(call);
         } catch (err) {
             res.status(500).json(errorBody('internal_error', err.message));
         }
