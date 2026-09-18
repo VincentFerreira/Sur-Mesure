@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { Job, JobContractType, JobWorkMode } from '../../types';
 import { CreateJobInput } from '../../services/jobService';
+import { useCompaniesStore } from '../../store/companiesStore';
 
 interface Props {
   open: boolean;
@@ -16,6 +17,7 @@ const WORK_MODES: JobWorkMode[] = ['onsite', 'hybrid', 'remote'];
 const CONTRACT_TYPES: JobContractType[] = ['CDI', 'CDD', 'freelance', 'internship'];
 
 const JobForm: React.FC<Props> = ({ open, initial, onClose, onSubmit }) => {
+  const { companies, fetchCompanies } = useCompaniesStore();
   const [company, setCompany] = useState(initial?.company ?? '');
   const [title, setTitle] = useState(initial?.title ?? '');
   const [descriptionRaw, setDescriptionRaw] = useState(initial?.descriptionRaw ?? '');
@@ -30,6 +32,11 @@ const JobForm: React.FC<Props> = ({ open, initial, onClose, onSubmit }) => {
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // The form stays mounted (returning null) while closed, so `open` — not just
+  // mount — must be a dependency: otherwise a company created after this component's
+  // first mount would never show up in the suggestions list.
+  useEffect(() => { if (open) fetchCompanies(); }, [open, fetchCompanies]);
 
   if (!open) return null;
 
@@ -90,7 +97,16 @@ const JobForm: React.FC<Props> = ({ open, initial, onClose, onSubmit }) => {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-slate-500">Company *</label>
-              <input value={company} onChange={(e) => setCompany(e.target.value)} data-testid="job-company-input" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              <input
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                list="job-company-suggestions"
+                data-testid="job-company-input"
+                className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              />
+              <datalist id="job-company-suggestions">
+                {companies.map((c) => <option key={c.id} value={c.name} />)}
+              </datalist>
             </div>
             <div>
               <label className="text-xs font-medium text-slate-500">Title *</label>

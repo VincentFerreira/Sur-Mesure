@@ -65,6 +65,15 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      # Fail-fast gate: confirms the API is healthy and the app actually renders in a
+      # real browser (not just that the servers are listening — playwright.config.ts's
+      # webServer already checks that) before spending time on the full suite. Catches
+      # an app-wide crash (e.g. a bad env-var assumption) in seconds with the real
+      # error message, instead of every test below failing independently with a
+      # generic timeout and no indication of the actual cause.
+      - name: Run E2E smoke test
+        run: npx playwright test --grep @smoke
+
       - name: Run E2E tests
         run: npm run test:e2e
 
