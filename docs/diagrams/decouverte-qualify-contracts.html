@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contrats IA — Découverte</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1660px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · Diagram Design</p>
+    <h1>Découverte — contrats des appels Claude CLI</h1>
+<svg viewBox="0 0 1660 1373" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="qualify-contracts-title qualify-contracts-desc">
+  <title id="qualify-contracts-title">Contrats des appels Claude CLI dans le pipeline Découverte : entrée, sortie attendue, validation au retour</title>
+  <desc id="qualify-contracts-desc">Schéma détaillant les trois appels à la CLI claude (élargissement des mots-clés, recherche web, qualification des candidats) avec pour chacun ce qui entre dans le prompt, le contrat JSON de sortie demandé, et ce qui est effectivement vérifié au retour par le code par rapport à ce qui est accepté sans validation ; les étapes déterministes (dédoublonnage, normalisation, empreinte, upsert) sont regroupées dans un seul nœud.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+    <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+    <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+  <rect x="40" y="316" width="836" height="323" rx="8"
+        fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+  <rect x="48" y="320" width="51" height="12" rx="2" fill="#f5f5f5"/>
+
+  <rect x="698.0" y="947" width="624.0" height="224" rx="8"
+        fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+  <rect x="706.0" y="951" width="110" height="12" rx="2" fill="#f5f5f5"/>
+  <path d="M 694.0,48 V 64.0 Q 694.0,72.0 686.0,72.0 H 668.0 Q 660.0,72.0 660.0,80.0 V 96" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 460,209.5 L 24,209.5" fill="none" stroke="#4f5d75" stroke-width="1.2"/>
+  <path d="M 24,370.0 L 24,530.0" fill="none" stroke="#4f5d75" stroke-width="1.2"/>
+  <path d="M 24,370.0 L 60,370.0" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 24,450.0 L 60,450.0" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 24,530.0 L 60,530.0" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 660.0,323 L 660.0,363" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 148.0,400 V 655 Q 148.0,663 156.0,663 H 936.0 Q 944.0,663 944.0,671 V 687" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 148.0,480 V 655 Q 148.0,663 156.0,663 H 980.0 Q 988.0,663 988.0,671 V 687" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 148.0,560 V 655 Q 148.0,663 156.0,663 H 1024.0 Q 1032.0,663 1032.0,671 V 687" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 660.0,623 V 655 Q 660.0,663 668.0,663 H 1068.0 Q 1076.0,663 1076.0,671 V 687" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 1010.0,815 L 1010.0,855" fill="none" stroke="#eb6c36" stroke-width="1.3" marker-end="url(#arrow-accent)"/>
+  <rect x="952" y="820" width="116" height="12" rx="2" fill="#f5f5f5"/>
+  <path d="M 1120,873.0 L 1200,873.0" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <rect x="1118" y="858" width="84" height="12" rx="2" fill="#f5f5f5"/>
+  <path d="M 1200,905.0 L 1120,905.0" fill="none" stroke="#4f5d75" stroke-width="1.0" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <rect x="1116" y="890" width="88" height="12" rx="2" fill="#f5f5f5"/>
+  <path d="M 1010.0,923 L 1010.0,979" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 966.0,1043 V 1059.0 Q 966.0,1067.0 958.0,1067.0 H 810.0 Q 802.0,1067.0 802.0,1075.0 V 1091" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 1010.0,1043 L 1010.0,1091" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 1054.0,1043 V 1059.0 Q 1054.0,1067.0 1062.0,1067.0 H 1210.0 Q 1218.0,1067.0 1218.0,1075.0 V 1091" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 802.0,1155 L 802.0,1195" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+  <path d="M 922.0,1011.0 H 662.0 Q 654.0,1011.0 654.0,1003.0 V 897.0 Q 654.0,889.0 662.0,889.0 H 900" fill="none" stroke="#4f5d75" stroke-width="1.0" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <rect x="574" y="935" width="153" height="12" rx="2" fill="#f5f5f5"/>
+  <rect x="610" y="8" width="168" height="40" rx="6" fill="#f5f5f5"/>
+  <rect x="610" y="8" width="168" height="40" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="618" y="14" width="27" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <rect x="60" y="340" width="176" height="60" rx="6" fill="#f5f5f5"/>
+  <rect x="60" y="340" width="176" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="68" y="346" width="27" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <rect x="60" y="420" width="176" height="60" rx="6" fill="#f5f5f5"/>
+  <rect x="60" y="420" width="176" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="68" y="426" width="27" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <rect x="60" y="500" width="176" height="60" rx="6" fill="#f5f5f5"/>
+  <rect x="60" y="500" width="176" height="60" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="68" y="506" width="27" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <rect x="900" y="687" width="220" height="128" rx="6" fill="#f5f5f5"/>
+  <rect x="900" y="687" width="220" height="128" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="908" y="693" width="27" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <rect x="900" y="855" width="220" height="68" rx="6" fill="#f5f5f5"/>
+  <rect x="900" y="855" width="220" height="68" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.4"/>
+  <rect x="908" y="861" width="22" height="12" rx="2" fill="transparent" stroke="#eb6c36" stroke-opacity="0.45" stroke-width="0.8"/>
+  <rect x="922.0" y="979" width="176" height="64" rx="6" fill="#f5f5f5"/>
+  <rect x="922.0" y="979" width="176" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="930.0" y="985" width="22" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <rect x="714.0" y="1091" width="176" height="64" rx="6" fill="#f5f5f5"/>
+  <rect x="714.0" y="1091" width="176" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="722.0" y="1097" width="22" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <rect x="922.0" y="1091" width="176" height="64" rx="6" fill="#f5f5f5"/>
+  <rect x="922.0" y="1091" width="176" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="930.0" y="1097" width="22" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <rect x="1130.0" y="1091" width="176" height="64" rx="6" fill="#f5f5f5"/>
+  <rect x="1130.0" y="1091" width="176" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="1138.0" y="1097" width="22" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <rect x="714.0" y="1195" width="176" height="64" rx="6" fill="#f5f5f5"/>
+  <rect x="714.0" y="1195" width="176" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="722.0" y="1201" width="33" height="12" rx="2" fill="transparent" stroke="#4f5d75" stroke-opacity="0.45" stroke-width="0.8"/>
+  <rect x="460" y="96" width="400" height="227" rx="8" fill="#f5f5f5"/>
+  <rect x="460" y="96" width="400" height="227" rx="8" fill="#ffffff" stroke="#2d3142" stroke-width="1.1"/>
+  <rect x="474" y="104" width="22" height="12" rx="2" fill="transparent" stroke="#6e6479" stroke-opacity="0.55" stroke-width="0.8"/>
+  <line x1="460" y1="130" x2="860" y2="130" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+  <line x1="460" y1="157" x2="860" y2="157" stroke="rgba(45,49,66,0.12)" stroke-width="0.6" stroke-dasharray="2,3"/>
+  <line x1="460" y1="199" x2="860" y2="199" stroke="rgba(45,49,66,0.12)" stroke-width="0.6" stroke-dasharray="2,3"/>
+  <line x1="460" y1="263" x2="860" y2="263" stroke="rgba(45,49,66,0.12)" stroke-width="0.6" stroke-dasharray="2,3"/>
+  <line x1="460" y1="305" x2="860" y2="305" stroke="rgba(45,49,66,0.12)" stroke-width="0.6" stroke-dasharray="2,3"/>
+  <rect x="460" y="363" width="400" height="260" rx="8" fill="#f5f5f5"/>
+  <rect x="460" y="363" width="400" height="260" rx="8" fill="#ffffff" stroke="#2d3142" stroke-width="1.1"/>
+  <rect x="474" y="371" width="22" height="12" rx="2" fill="transparent" stroke="#6e6479" stroke-opacity="0.55" stroke-width="0.8"/>
+  <line x1="460" y1="397" x2="860" y2="397" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+  <line x1="460" y1="435" x2="860" y2="435" stroke="rgba(45,49,66,0.12)" stroke-width="0.6" stroke-dasharray="2,3"/>
+  <line x1="460" y1="499" x2="860" y2="499" stroke="rgba(45,49,66,0.12)" stroke-width="0.6" stroke-dasharray="2,3"/>
+  <line x1="460" y1="563" x2="860" y2="563" stroke="rgba(45,49,66,0.12)" stroke-width="0.6" stroke-dasharray="2,3"/>
+  <line x1="460" y1="605" x2="860" y2="605" stroke="rgba(45,49,66,0.12)" stroke-width="0.6" stroke-dasharray="2,3"/>
+  <rect x="1200" y="753.5" width="420" height="271" rx="8" fill="#f5f5f5"/>
+  <rect x="1200" y="753.5" width="420" height="271" rx="8" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.6"/>
+  <rect x="1214" y="761.5" width="22" height="12" rx="2" fill="transparent" stroke="#eb6c36" stroke-opacity="0.55" stroke-width="0.8"/>
+  <line x1="1200" y1="787.5" x2="1620" y2="787.5" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+  <line x1="1200" y1="847.5" x2="1620" y2="847.5" stroke="rgba(45,49,66,0.12)" stroke-width="0.6" stroke-dasharray="2,3"/>
+  <line x1="1200" y1="900.5" x2="1620" y2="900.5" stroke="rgba(45,49,66,0.12)" stroke-width="0.6" stroke-dasharray="2,3"/>
+  <line x1="1200" y1="964.5" x2="1620" y2="964.5" stroke="rgba(45,49,66,0.12)" stroke-width="0.6" stroke-dasharray="2,3"/>
+  <line x1="1200" y1="1006.5" x2="1620" y2="1006.5" stroke="rgba(45,49,66,0.12)" stroke-width="0.6" stroke-dasharray="2,3"/>
+  <line x1="40" y1="1293" x2="1620" y2="1293" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+  <rect x="140" y="1299" width="10" height="10" rx="2" fill="#5a7d4a" fill-opacity="0.75"/>
+  <rect x="462.79999999999995" y="1299" width="10" height="10" rx="2" fill="#9a5b3a" fill-opacity="0.75"/>
+  <rect x="822.3999999999999" y="1299" width="10" height="10" rx="2" fill="#eb6c36" fill-opacity="0.75"/>
+
+  <text x="73" y="329" fill="rgba(45,49,66,0.45)" font-size="7"
+        font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">SOURCES</text>
+
+  <text x="761" y="960" fill="rgba(45,49,66,0.45)" font-size="7"
+        font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">DÉCOUVERTE (client)</text>
+
+
+
+
+
+
+
+
+
+
+
+
+  <text x="1010" y="829" fill="#7a8399" font-size="7.5" font-family="'Geist Mono', monospace"
+        text-anchor="middle" letter-spacing="0.03em">candidat (nouveau | vu)</text>
+
+  <text x="1160" y="867" fill="#7a8399" font-size="7.5" font-family="'Geist Mono', monospace"
+        text-anchor="middle" letter-spacing="0.03em">candidats du lot</text>
+
+  <text x="1160" y="899" fill="#7a8399" font-size="7.5" font-family="'Geist Mono', monospace"
+        text-anchor="middle" letter-spacing="0.03em">fit/score/signals</text>
+
+
+
+
+
+
+  <text x="650" y="944" fill="#7a8399" font-size="7.5" font-family="'Geist Mono', monospace"
+        text-anchor="middle" letter-spacing="0.03em">PATCH statut / fit / score / vu</text>
+  <text x="632" y="23" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CFG</text>
+  <text x="694" y="40" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Préférences</text>
+  <text x="694" y="55" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">jobTitles · locations · workModes · cvId</text>
+  <text x="82" y="355" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+  <text x="148" y="372" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">France Travail</text>
+  <text x="148" y="387" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">Offres d&#x27;emploi v2 · OAuth2</text>
+  <text x="82" y="435" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+  <text x="148" y="452" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Arbeitnow</text>
+  <text x="148" y="467" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">job-board-api · public, sans clé</text>
+  <text x="82" y="515" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+  <text x="148" y="532" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">freehire.me</text>
+  <text x="148" y="547" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">agent/jobs/search · public</text>
+  <text x="922" y="702" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SRV</text>
+  <text x="1010" y="719" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Pipeline déterministe</text>
+  <text x="1010" y="734" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">Filtrer doublons — vs Jobs (URL / société+titre)</text>
+  <text x="1010" y="745" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">Normalize — entités, dept, title-case, remote</text>
+  <text x="1010" y="756" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">Fingerprint — portail:id | hash(soc,titre,dept)</text>
+  <text x="1010" y="767" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">Upsert — touch si déjà vu, insert sinon</text>
+  <text x="919" y="870" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DB</text>
+  <text x="1010" y="887" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">SQLite — candidates</text>
+  <text x="1010" y="902" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">node:sqlite · UNIQUE(fingerprint)</text>
+  <text x="941" y="994" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+  <text x="1010" y="1011" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Liste Découverte</text>
+  <text x="1010" y="1026" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">non-vues d&#x27;abord, puis fit + récence</text>
+  <text x="733" y="1106" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+  <text x="802" y="1123" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Import → Job</text>
+  <text x="802" y="1138" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">JobForm → addJob()</text>
+  <text x="941" y="1106" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+  <text x="1010" y="1123" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Écarter</text>
+  <text x="1010" y="1138" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">status: dismissed</text>
+  <text x="1149" y="1106" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+  <text x="1218" y="1123" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Marquer vu</text>
+  <text x="1218" y="1138" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">IntersectionObserver 1s / bulk</text>
+  <text x="739" y="1210" fill="#4f5d75" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">FILE</text>
+  <text x="802" y="1227" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Jobs (JSON)</text>
+  <text x="802" y="1242" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" text-anchor="middle">server/store.js · data/jobs/*.json</text>
+  <text x="485" y="113" fill="#6e6479" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">AI</text>
+  <text x="506" y="113" fill="#2d3142" font-size="12.5" font-weight="600" font-family="'Geist', sans-serif">Élargir mots-clés</text>
+  <text x="474" y="125" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace">claudeCli.js — expandKeywords()</text>
+  <text x="474" y="142" fill="#4f5d75" font-size="6.5" font-weight="600" font-family="'Geist Mono', monospace" letter-spacing="0.10em">ENTRÉE</text>
+  <text x="474" y="153" fill="#2d3142" font-size="7.5" font-family="'Geist Mono', monospace">jobTitles (préférences, non élargis)</text>
+  <text x="474" y="173" fill="#2e5aa8" font-size="6.5" font-weight="600" font-family="'Geist Mono', monospace" letter-spacing="0.10em">SORTIE ATTENDUE (prompt)</text>
+  <text x="474" y="184" fill="#2d3142" font-size="7.5" font-family="'Geist Mono', monospace">{&quot;keywords&quot;: string[]}</text>
+  <text x="474" y="195" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">≤ 10, hors doublons des originaux</text>
+  <text x="474" y="215" fill="#5a7d4a" font-size="6.5" font-weight="600" font-family="'Geist Mono', monospace" letter-spacing="0.10em">VÉRIFIÉ AU RETOUR</text>
+  <text x="474" y="226" fill="#2d3142" font-size="7.5" font-family="'Geist Mono', monospace">JSON.parse (catch → dégrade)</text>
+  <text x="474" y="237" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">Array.isArray(keywords) sinon []</text>
+  <text x="474" y="248" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">string non vide, pas déjà présent (lowercase)</text>
+  <text x="474" y="259" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">slice(0, 10)</text>
+  <text x="474" y="279" fill="#9a5b3a" font-size="6.5" font-weight="600" font-family="'Geist Mono', monospace" letter-spacing="0.10em">NON VÉRIFIÉ (confiance)</text>
+  <text x="474" y="290" fill="#2d3142" font-size="7.5" font-family="'Geist Mono', monospace">pertinence sémantique — confiée au prompt seul</text>
+  <text x="474" y="301" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">échec CLI/JSON → jobTitles inchangés, sans erreur</text>
+  <text x="485" y="380" fill="#6e6479" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">AI</text>
+  <text x="506" y="380" fill="#2d3142" font-size="12.5" font-weight="600" font-family="'Geist', sans-serif">Claude CLI — recherche web</text>
+  <text x="474" y="392" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace">claudeCli.js — searchAll()</text>
+  <text x="474" y="409" fill="#4f5d75" font-size="6.5" font-weight="600" font-family="'Geist Mono', monospace" letter-spacing="0.10em">ENTRÉE</text>
+  <text x="474" y="420" fill="#2d3142" font-size="7.5" font-family="'Geist Mono', monospace">jobTitles + locations</text>
+  <text x="474" y="431" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">prompt : site:welcometothejungle.com, site:apec.fr</text>
+  <text x="474" y="451" fill="#2e5aa8" font-size="6.5" font-weight="600" font-family="'Geist Mono', monospace" letter-spacing="0.10em">SORTIE ATTENDUE (prompt)</text>
+  <text x="474" y="462" fill="#2d3142" font-size="7.5" font-family="'Geist Mono', monospace">[{title,company,location,url,</text>
+  <text x="474" y="473" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace"> postedDate,descriptionRaw,</text>
+  <text x="474" y="484" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace"> contractType,salaryRange}]</text>
+  <text x="474" y="495" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">doit avoir fetché chaque page avant de l&#x27;inclure</text>
+  <text x="474" y="515" fill="#5a7d4a" font-size="6.5" font-weight="600" font-family="'Geist Mono', monospace" letter-spacing="0.10em">VÉRIFIÉ AU RETOUR</text>
+  <text x="474" y="526" fill="#2d3142" font-size="7.5" font-family="'Geist Mono', monospace">JSON.parse (catch → [])</text>
+  <text x="474" y="537" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">Array.isArray</text>
+  <text x="474" y="548" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">title / company / url : string non vide</text>
+  <text x="474" y="559" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">contractType ∈ {CDI,CDD,freelance,internship} sinon undefined</text>
+  <text x="474" y="579" fill="#9a5b3a" font-size="6.5" font-weight="600" font-family="'Geist Mono', monospace" letter-spacing="0.10em">NON VÉRIFIÉ (confiance)</text>
+  <text x="474" y="590" fill="#2d3142" font-size="7.5" font-family="'Geist Mono', monospace">l&#x27;URL a vraiment été fetchée — confié au prompt</text>
+  <text x="474" y="601" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">postedDate / description / salaire : aucune validation</text>
+  <text x="1225" y="770.5" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">AI</text>
+  <text x="1246" y="770.5" fill="#2d3142" font-size="12.5" font-weight="600" font-family="'Geist', sans-serif">AI Qualify</text>
+  <text x="1214" y="782.5" fill="#7a8399" font-size="7" font-family="'Geist Mono', monospace">claudeCli.js — qualifyAll() / qualifyBatch()</text>
+  <text x="1214" y="800" fill="#4f5d75" font-size="6.5" font-weight="600" font-family="'Geist Mono', monospace" letter-spacing="0.10em">ENTRÉE</text>
+  <text x="1214" y="810" fill="#2d3142" font-size="7.5" font-family="'Geist Mono', monospace">lots de 25 : id,title,company,location,</text>
+  <text x="1214" y="822" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">description (400 car.)</text>
+  <text x="1214" y="832" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">+ jobTitles/locations/workModes originaux</text>
+  <text x="1214" y="844" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">+ cvText si preferences.cvId défini</text>
+  <text x="1214" y="864" fill="#2e5aa8" font-size="6.5" font-weight="600" font-family="'Geist Mono', monospace" letter-spacing="0.10em">SORTIE ATTENDUE (prompt)</text>
+  <text x="1214" y="874" fill="#2d3142" font-size="7.5" font-family="'Geist Mono', monospace">{&quot;results&quot;:[{id,score,</text>
+  <text x="1214" y="886" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace"> signals:[{label,polarity}]}]}</text>
+  <text x="1214" y="896" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">1 entrée attendue par candidat du lot</text>
+  <text x="1214" y="916" fill="#5a7d4a" font-size="6.5" font-weight="600" font-family="'Geist Mono', monospace" letter-spacing="0.10em">VÉRIFIÉ AU RETOUR</text>
+  <text x="1214" y="928" fill="#2d3142" font-size="7.5" font-family="'Geist Mono', monospace">JSON.parse (catch → {} pour tout le lot)</text>
+  <text x="1214" y="938" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">id : string</text>
+  <text x="1214" y="950" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">score : number non-NaN → clamp[0,100], round</text>
+  <text x="1214" y="960" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">signals : label non vide + polarity ∈ enum, max 4, label ≤ 40 car.</text>
+  <text x="1214" y="980" fill="#9a5b3a" font-size="6.5" font-weight="600" font-family="'Geist Mono', monospace" letter-spacing="0.10em">NON VÉRIFIÉ (confiance)</text>
+  <text x="1214" y="992" fill="#2d3142" font-size="7.5" font-family="'Geist Mono', monospace">fit n&#x27;est jamais lu depuis l&#x27;IA — recalculé via fitFromScore(score)</text>
+  <text x="1214" y="1002" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace">lot en échec → candidats simplement sans entrée (pas d&#x27;erreur, pas de défaut)</text>
+  <text x="40" y="1309" fill="#4f5d75" font-size="7.5" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LECTURE</text>
+  <text x="156" y="1308" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">VÉRIFIÉ AU RETOUR — contrôlé et corrigé/rejeté par le code</text>
+  <text x="478.79999999999995" y="1308" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">NON VÉRIFIÉ — accepté tel quel, confiance faite au prompt / à l&#x27;IA</text>
+  <text x="838.3999999999999" y="1308" fill="#7a8399" font-size="7.5" font-family="'Geist', sans-serif">nœud focal — store principal ou étape de décision IA</text>
+</svg>
+  </div>
+</body>
+</html>

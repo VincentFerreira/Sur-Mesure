@@ -16,6 +16,7 @@ import { parseResumeFromPdf, AIProvider } from '../services/aiService';
 import { compileToPdf, downloadBlob } from '../services/pdfService';
 import { exportAsHtml } from '../services/htmlService';
 import { autoSaveToLocalStorage, restoreFromLocalStorage, loadCV } from '../services/cvStorageService';
+import { useTemplateSettingsStore } from '../store/templateSettingsStore';
 import {
   UploadCloud, Loader2, Layers, Download,
   ChevronDown, Eye, Code2, FileText, Globe,
@@ -57,6 +58,7 @@ const EditorPage: React.FC = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
+  const { fontId, fetchTemplateSettings } = useTemplateSettingsStore();
 
   // Tracks which cvId's data is already reflected in state, so the effect below
   // only fetches on genuine navigation (typed URL, browser back/forward) — not
@@ -92,6 +94,10 @@ const EditorPage: React.FC = () => {
     const timer = setTimeout(() => autoSaveToLocalStorage(cvData), 1000);
     return () => clearTimeout(timer);
   }, [cvData]);
+
+  useEffect(() => {
+    fetchTemplateSettings();
+  }, [fetchTemplateSettings]);
 
   useEffect(() => {
     document.documentElement.lang = cvData.currentLanguage;
@@ -157,7 +163,7 @@ const EditorPage: React.FC = () => {
 
   const handleExportLatex = () => {
     setShowExportDropdown(false);
-    const code = generateLatex(cvData);
+    const code = generateLatex(cvData, undefined, fontId);
     const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
     const fileName = `cv_${cvData.personalInfo.firstName || 'export'}_${cvData.personalInfo.lastName || ''}.tex`.replace(/\s+/g, '_');
     downloadBlob(blob, fileName);
@@ -167,7 +173,7 @@ const EditorPage: React.FC = () => {
     setShowExportDropdown(false);
     setIsGeneratingPdf(true);
     try {
-      const { latex, photoData } = generateLatexWithPhoto(cvData);
+      const { latex, photoData } = generateLatexWithPhoto(cvData, fontId);
       const pdfBlob = await compileToPdf(latex, photoData);
       const fileName = `cv_${cvData.personalInfo.firstName || 'export'}_${cvData.personalInfo.lastName || ''}.pdf`;
       downloadBlob(pdfBlob, fileName.replace(/\s+/g, '_'));

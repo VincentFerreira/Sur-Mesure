@@ -1,4 +1,9 @@
-const API_BASE = `http://${window.location.hostname}:3001/api`;
+// Injected by vite.config.ts's `define` from the API_PORT env var (default '3001') —
+// lets playwright.config.ts spawn an e2e-only server on a different port without
+// colliding with a normally-running `npm start` (see CLAUDE.md's architecture note on
+// this and pdfService.ts's own hardcoded port).
+export const API_PORT = process.env.API_PORT || '3001';
+const API_BASE = `http://${window.location.hostname}:${API_PORT}/api`;
 
 export class ApiError extends Error {
   status: number;

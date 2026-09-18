@@ -12,6 +12,10 @@ services:
       # Bind mounts on Docker Desktop (macOS/Windows) don't reliably deliver
       # file-change events, so Vite falls back to polling — see vite.config.ts.
       - CHOKIDAR_USEPOLLING=true
+      # Tells server/scrapers/claudeCli.js exactly which binary to exec — same
+      # absolute path as on the host, since it's bind-mounted there unchanged (see
+      # the two claude mounts below).
+      - CLAUDE_CLI_PATH=${HOME}/.local/bin/claude
     volumes:
       - .:/yarb
       # Anonymous volume: keeps the image's own node_modules (installed for the
@@ -25,3 +29,20 @@ services:
       # your own external folder. Defaults to the in-repo (gitignored) ./data
       # so a plain `docker compose up` still works with zero config.
       - ${YARB_DATA_HOST_DIR:-./data}:/yarb/data
+      # Lets server/scrapers/claudeCli.js exec the `claude` CLI already installed on
+      # the host (the job-search feature's web-search portal — no separate billed
+      # Anthropic API key, uses whatever auth the CLI already has). Mounted at the
+      # SAME absolute host path so the ~/.local/bin/claude symlink — which points at
+      # an absolute path under ~/.local/share/claude/versions/ — still resolves
+      # correctly inside the container. ~/.claude (the CLI's own auth/session/cache
+      # state) goes to /root/.claude since the image runs as root (no USER in the
+      # Dockerfile) and the CLI reads (and sometimes refreshes) it relative to $HOME.
+      # Requires `claude` to actually be installed on the host at this path — if it
+      # isn't, Docker silently creates empty directories here instead of failing, and
+      # this one portal just fails at runtime (caught the same way a misconfigured
+      # France Travail is). Comment out these two lines to keep the container fully
+      # isolated from your Claude Code session.
+      - ${HOME}/.local/share/claude:${HOME}/.local/share/claude:ro
+      - ${HOME}/.local/bin/claude:${HOME}/.local/bin/claude:ro
+      - ${HOME}/.claude:/root/.claude
+      - ${HOME}/.claude.json:/root/.claude.json
