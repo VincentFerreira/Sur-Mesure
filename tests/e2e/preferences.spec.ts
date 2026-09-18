@@ -127,12 +127,9 @@ test('France Travail credentials: the client id round-trips plainly, and the sec
   await expect(page.getByTestId('france-travail-client-secret-input')).toHaveAttribute('placeholder', 'Saved — leave blank to keep');
 });
 
-// NOTE: the two tests below this point are pre-existing and, as of this change, one of
-// them ("add, remove, retype...") fails for reasons unrelated to scraping preferences
-// (a TagInput pill-removal interaction) — tracked separately, not fixed here. The two
-// new tests above are placed before it deliberately: this file runs in serial mode, so
-// a failure here would otherwise abort every test after it and leave this feature
-// permanently unverified by CI.
+// The two tests below this point are pre-existing; the two new tests above are placed
+// before them deliberately (this file runs in serial mode, so a failure here would
+// otherwise abort every test after it).
 test('add, remove, retype without committing, then Save: only the retyped value is kept', async ({ page }) => {
   await page.goto('/preferences');
 
@@ -140,7 +137,11 @@ test('add, remove, retype without committing, then Save: only the retyped value 
   await page.getByTestId('job-titles-add-button').click();
   const pill = page.getByTestId('job-titles-list').locator('span', { hasText: 'Discarded' });
   await pill.getByRole('button').click();
-  await expect(page.getByTestId('job-titles-list')).not.toBeVisible();
+  // Not `not.toBeVisible()` on the whole list: earlier tests in this serial-mode file
+  // already left other titles (QA Engineer, SDET, Untouched Draft Title...) in the
+  // same shared preferences record, so the list never actually empties out — only
+  // "Discarded" specifically is gone.
+  await expect(page.getByTestId('job-titles-list')).not.toContainText('Discarded');
 
   await page.getByTestId('job-titles-input').fill('Kept After Retype');
   await page.getByTestId('preferences-save-button').click();
