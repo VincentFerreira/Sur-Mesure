@@ -248,7 +248,7 @@ const EditorPage: React.FC = () => {
           onClick={() => navigate('/cvs')}
           className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
         >
-          Back to CVthèque
+          Back to CV Library
         </button>
       </div>
     );

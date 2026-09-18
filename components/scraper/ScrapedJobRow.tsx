@@ -45,7 +45,7 @@ const ScrapedJobRow: React.FC<Props> = ({ candidate, unseen, onImport, onDismiss
         </a>
         <p className="text-xs text-slate-500 mt-0.5">
           {candidate.company} · {candidate.location || '—'}
-          {candidate.isRemote ? ' · Télétravail' : ''} · {formatRelativeDate(candidate.postedDate)}
+          {candidate.isRemote ? ' · Remote' : ''} · {formatRelativeDate(candidate.postedDate)}
         </p>
         <div className="flex flex-wrap gap-1.5 mt-1.5">
           {(candidate.signals ?? []).map((signal, i) => (
@@ -61,12 +61,12 @@ const ScrapedJobRow: React.FC<Props> = ({ candidate, unseen, onImport, onDismiss
             data-testid={`import-scraped-job-${candidate.id}`}
             className="text-xs font-semibold text-indigo-600 border border-indigo-200 rounded-md px-3 py-1.5 hover:bg-indigo-50"
           >
-            Importer
+            Import
           </button>
           <button
             onClick={() => onDismiss(candidate)}
             data-testid={`dismiss-scraped-job-${candidate.id}`}
-            aria-label="Écarter"
+            aria-label="Dismiss"
             className="text-slate-400 border border-slate-200 rounded-md p-1.5 hover:bg-slate-50 hover:text-slate-600"
           >
             ✕

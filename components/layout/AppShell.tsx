@@ -4,17 +4,17 @@ import { Briefcase, Building2, Layers, BarChart3, Settings, Radar, Activity } fr
 import { useScraperStore } from '../../store/scraperStore';
 
 const NAV_ITEMS = [
-  { to: '/jobs', icon: Briefcase, label: 'Postes' },
-  { to: '/job-search', icon: Radar, label: 'Découverte' },
-  { to: '/companies', icon: Building2, label: 'Entreprises' },
-  { to: '/cvs', icon: Layers, label: 'CVthèque' },
-  { to: '/insights', icon: BarChart3, label: 'Analyse' },
-  { to: '/observability', icon: Activity, label: 'Observabilité' },
-  { to: '/preferences', icon: Settings, label: 'Préférences' },
+  { to: '/jobs', icon: Briefcase, label: 'Jobs' },
+  { to: '/job-search', icon: Radar, label: 'Discovery' },
+  { to: '/companies', icon: Building2, label: 'Companies' },
+  { to: '/cvs', icon: Layers, label: 'CV Library' },
+  { to: '/insights', icon: BarChart3, label: 'Insights' },
+  { to: '/observability', icon: Activity, label: 'Observability' },
+  { to: '/preferences', icon: Settings, label: 'Preferences' },
 ];
 
 const AppShell: React.FC = () => {
-  // First store dependency this file has ever had — needed to badge "Découverte"
+  // First store dependency this file has ever had — needed to badge "Discovery"
   // with a count of never-viewed offers regardless of which page is currently active.
   const { candidates, fetchCandidates } = useScraperStore();
   useEffect(() => {

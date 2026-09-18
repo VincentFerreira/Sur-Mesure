@@ -43,28 +43,28 @@ const AiCallDetailPanel: React.FC<Props> = ({ detail, loading, error }) => {
         {detail.prompt ? (
           <pre className={PRE_CLASS} data-testid="obs-call-detail-prompt">{detail.prompt}</pre>
         ) : (
-          <p className="text-xs text-slate-400">Aucun prompt enregistré.</p>
+          <p className="text-xs text-slate-400">No prompt logged.</p>
         )}
       </div>
 
       {detail.status === 'success' && (
         <div>
-          <p className="text-xs font-semibold text-slate-500 mb-1">Réponse</p>
+          <p className="text-xs font-semibold text-slate-500 mb-1">Response</p>
           {detail.responseText ? (
             <pre className={PRE_CLASS} data-testid="obs-call-detail-response">{detail.responseText}</pre>
           ) : (
-            <p className="text-xs text-slate-400">Aucune réponse enregistrée.</p>
+            <p className="text-xs text-slate-400">No response logged.</p>
           )}
         </div>
       )}
 
       {detail.status === 'error' && (
         <div data-testid="obs-call-detail-error">
-          <p className="text-xs font-semibold text-slate-500 mb-1">Erreur</p>
+          <p className="text-xs font-semibold text-slate-500 mb-1">Error</p>
           <p className="text-xs text-red-500 mb-1.5">{detail.errorMessage}</p>
           {detail.errorDetail && (
             <>
-              <p className="text-xs font-semibold text-slate-500 mb-1">Détail technique</p>
+              <p className="text-xs font-semibold text-slate-500 mb-1">Technical detail</p>
               <pre className={`${PRE_CLASS} text-red-600`} data-testid="obs-call-detail-error-detail">{detail.errorDetail}</pre>
             </>
           )}
@@ -73,7 +73,7 @@ const AiCallDetailPanel: React.FC<Props> = ({ detail, loading, error }) => {
 
       {detail.stepTrace && detail.stepTrace.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-slate-500 mb-1">Trace des étapes</p>
+          <p className="text-xs font-semibold text-slate-500 mb-1">Step trace</p>
           <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1.5" data-testid="obs-call-detail-steps">
             {detail.stepTrace.map((step, i) => (
               'note' in step ? (

@@ -9,7 +9,7 @@ interface Props {
 }
 
 // Same visual idiom as JobsPage's KPI tiles (text-2xl font-bold value + a muted
-// caption), but these navigate cross-page (Découverte/Postes) rather than filtering
+// caption), but these navigate cross-page (Discovery/Jobs) rather than filtering
 // in place, so a Link rather than a filter-setting button.
 const StatTile: React.FC<Props> = ({ value, label, to, testId }) => (
   <Link

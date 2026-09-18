@@ -209,7 +209,7 @@ describe('POST /api/scraper/qualify', () => {
       });
     expect(res.status).toBe(200);
     expect(res.body.results['1'].fit).toBe('medium');
-    expect(res.body.results['1'].signals).toContainEqual({ label: 'Sur site non souhaité', polarity: 'negative' });
+    expect(res.body.results['1'].signals).toContainEqual({ label: 'Onsite not wanted', polarity: 'negative' });
   });
 
   // The point of the whole feature: a reason typed once on a past dismissal should
@@ -232,7 +232,7 @@ describe('POST /api/scraper/qualify', () => {
         jobTitles: ['Memory Wiring Engineer'],
       });
     expect(res.status).toBe(200);
-    expect(res.body.results['new-1'].signals).toContainEqual({ label: 'Comme rejet précédent', polarity: 'negative' });
+    expect(res.body.results['new-1'].signals).toContainEqual({ label: 'Similar to a past rejection', polarity: 'negative' });
   });
 });
 

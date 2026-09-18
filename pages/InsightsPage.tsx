@@ -1,5 +1,5 @@
-// Analyse page — turns data already collected elsewhere in the app (Découverte
-// discoveries, ATS scores, the Postes pipeline) into metrics meant to answer two
+// Insights page — turns data already collected elsewhere in the app (Discovery
+// discoveries, ATS scores, the Jobs pipeline) into metrics meant to answer two
 // questions: where should I search, and what should I change on my CV. Each section
 // owns its own empty state rather than a single page-level gate, since the three
 // sections depend on different, independent data (discoveries / scored jobs / jobs
@@ -60,7 +60,7 @@ const InsightsPage: React.FC = () => {
     fetchPreferences();
   }, [fetchJobs, fetchCvs, fetchCandidates, fetchPreferences]);
 
-  // Section A — Orienter la recherche
+  // Section A — Steer the search
   const distribution = useMemo(() => fitDistribution(candidates), [candidates]);
   const reviews = useMemo(() => [reviewConversion(candidates, 'high'), reviewConversion(candidates, 'medium')], [candidates]);
   const negativeSignals = useMemo(() => tallySignalThemes(candidates, 'negative'), [candidates]);
@@ -69,7 +69,7 @@ const InsightsPage: React.FC = () => {
   const geography = useMemo(() => geographyBreakdown(candidates), [candidates]);
   const remoteNudge = shouldNudgeRemoteMismatch(geography.remoteShare, preferences?.workModes ?? []);
 
-  // Section B — Adapter le CV
+  // Section B — Tune the CV
   const scoredJobs = useMemo(() => jobs.filter((j) => j.ats), [jobs]);
   const cvsById = useMemo(() => new Map(cvs.map((cv) => [cv.id, cv])), [cvs]);
   const staleCount = useMemo(
@@ -80,7 +80,7 @@ const InsightsPage: React.FC = () => {
   const missingKeywords = useMemo(() => topMissingKeywords(jobs), [jobs]);
   const formattingIssues = useMemo(() => recurringFormattingIssues(jobs), [jobs]);
 
-  // Section C — Pipeline de conversion
+  // Section C — Conversion pipeline
   const funnel = useMemo(() => computeFunnel(jobs), [jobs]);
 
   const loading =
@@ -90,28 +90,28 @@ const InsightsPage: React.FC = () => {
   return (
     <div className="h-full overflow-y-auto" data-testid="insights-page">
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
-        <h1 className="text-xl font-bold text-slate-800">Analyse</h1>
+        <h1 className="text-xl font-bold text-slate-800">Insights</h1>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatTile
             testId="insight-stat-discovered"
             value={jobsLoading || candidatesLoading ? '—' : distribution.total}
-            label="offres découvertes"
+            label="jobs discovered"
             to="/job-search"
           />
           <StatTile
             testId="insight-stat-high-fit"
             value={candidatesLoading ? '—' : distribution.high}
-            label="offres Fort"
+            label="high-fit jobs"
             to="/job-search"
           />
           <StatTile
             testId="insight-stat-ats-avg"
             value={jobsLoading ? '—' : (scoreDelta.avgOverall ?? '—')}
-            label={`score ATS moyen (${scoreDelta.scoredCount} poste${scoreDelta.scoredCount > 1 ? 's' : ''})`}
+            label={`avg ATS score (${scoreDelta.scoredCount} job${scoreDelta.scoredCount > 1 ? 's' : ''})`}
             to="/jobs"
           />
-          <StatTile testId="insight-stat-applied" value={jobsLoading ? '—' : appliedCount} label="candidatures envoyées" to="/jobs" />
+          <StatTile testId="insight-stat-applied" value={jobsLoading ? '—' : appliedCount} label="applications sent" to="/jobs" />
         </div>
 
         {loading && (
@@ -123,30 +123,30 @@ const InsightsPage: React.FC = () => {
         {!loading && (
           <section data-testid="insights-section-search" className="space-y-4">
             <div>
-              <h2 className="text-sm font-semibold text-slate-600">Orienter la recherche</h2>
+              <h2 className="text-sm font-semibold text-slate-600">Steer the search</h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                {distribution.total} offre{distribution.total > 1 ? 's' : ''} découverte{distribution.total > 1 ? 's' : ''} ·{' '}
-                {distribution.total - distribution.unqualified} évaluée{distribution.total - distribution.unqualified > 1 ? 's' : ''} ·{' '}
-                {distribution.unqualified} non évaluée{distribution.unqualified > 1 ? 's' : ''}
+                {distribution.total} job{distribution.total > 1 ? 's' : ''} discovered ·{' '}
+                {distribution.total - distribution.unqualified} qualified ·{' '}
+                {distribution.unqualified} not qualified
               </p>
             </div>
             {distribution.total === 0 ? (
               <div className="bg-white border border-slate-200 rounded-xl p-4">
                 <p className="text-sm text-slate-400" data-testid="insight-empty-search">
-                  Aucune offre découverte pour l'instant.{' '}
+                  No jobs discovered yet.{' '}
                   <Link to="/job-search" className="text-indigo-600 hover:text-indigo-800 font-medium">
-                    Lancer une recherche
+                    Run a search
                   </Link>
                 </p>
               </div>
             ) : distribution.total - distribution.unqualified === 0 ? (
               <div className="bg-white border border-slate-200 rounded-xl p-4">
                 <p className="text-sm text-slate-400">
-                  Aucune offre évaluée.{' '}
+                  No jobs qualified yet.{' '}
                   <Link to="/job-search" className="text-indigo-600 hover:text-indigo-800 font-medium">
-                    Relancez une recherche
+                    Run another search
                   </Link>{' '}
-                  pour que les nouvelles offres soient notées.
+                  so new jobs get scored.
                 </p>
               </div>
             ) : (
@@ -154,7 +154,7 @@ const InsightsPage: React.FC = () => {
                 <FitDistributionCard distribution={distribution} reviews={reviews} />
                 <PortalYieldCard result={portals} />
                 <SignalThemesCard
-                  title="Freins récurrents du marché"
+                  title="Recurring market blockers"
                   testId="insight-card-signals-negative"
                   emptyTestId="insight-empty-signals-negative"
                   polarity="negative"
@@ -162,7 +162,7 @@ const InsightsPage: React.FC = () => {
                   barClassName="bg-amber-400"
                 />
                 <SignalThemesCard
-                  title="Atouts récurrents"
+                  title="Recurring strengths"
                   testId="insight-card-signals-positive"
                   emptyTestId="insight-empty-signals-positive"
                   polarity="positive"
@@ -182,20 +182,20 @@ const InsightsPage: React.FC = () => {
         {!loading && (
           <section data-testid="insights-section-cv" className="space-y-4">
             <div>
-              <h2 className="text-sm font-semibold text-slate-600">Adapter le CV</h2>
+              <h2 className="text-sm font-semibold text-slate-600">Tune the CV</h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                {scoredJobs.length} poste{scoredJobs.length > 1 ? 's' : ''} scoré{scoredJobs.length > 1 ? 's' : ''}
-                {staleCount > 0 && ` · ${staleCount} score${staleCount > 1 ? 's' : ''} obsolète${staleCount > 1 ? 's' : ''} (CV modifié depuis)`}
+                {scoredJobs.length} job{scoredJobs.length > 1 ? 's' : ''} scored
+                {staleCount > 0 && ` · ${staleCount} stale score${staleCount > 1 ? 's' : ''} (CV changed since)`}
               </p>
             </div>
             {scoredJobs.length === 0 ? (
               <div className="bg-white border border-slate-200 rounded-xl p-4">
                 <p className="text-sm text-slate-400" data-testid="insight-empty-cv">
-                  Aucun poste scoré.{' '}
+                  No job scored yet.{' '}
                   <Link to="/jobs" className="text-indigo-600 hover:text-indigo-800 font-medium">
-                    Calculez un score ATS
+                    Compute an ATS score
                   </Link>{' '}
-                  sur un poste pour voir quoi ajuster dans votre CV.
+                  on a job to see what to tune in your CV.
                 </p>
               </div>
             ) : (
@@ -211,7 +211,7 @@ const InsightsPage: React.FC = () => {
         {!loading && (
           <section data-testid="insights-section-pipeline" className="space-y-4">
             <div>
-              <h2 className="text-sm font-semibold text-slate-600">Pipeline de conversion</h2>
+              <h2 className="text-sm font-semibold text-slate-600">Conversion pipeline</h2>
             </div>
             <FunnelCard funnel={funnel} />
           </section>

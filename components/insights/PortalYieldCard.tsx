@@ -10,10 +10,10 @@ interface Props {
 }
 
 const PortalYieldCard: React.FC<Props> = ({ result }) => (
-  <InsightCard title="Rendement par portail" testId="insight-card-portals">
+  <InsightCard title="Yield by portal" testId="insight-card-portals">
     {result.ranked.length === 0 && result.insufficient.length === 0 ? (
       <p className="text-sm text-slate-400" data-testid="insight-empty-portals">
-        Pas encore assez d'offres évaluées pour comparer les portails.
+        Not enough qualified jobs yet to compare portals.
       </p>
     ) : (
       <>
@@ -25,17 +25,17 @@ const PortalYieldCard: React.FC<Props> = ({ result }) => (
                 labelClassName="w-32"
                 widthPercent={row.highRate * 100}
                 barClassName="bg-emerald-400"
-                valueText={`${formatPercent(row.highRate)} Fort`}
+                valueText={`${formatPercent(row.highRate)} High`}
               />
               <p className="text-xs text-slate-400 mt-0.5 ml-[calc(8rem+0.75rem)]">
-                {row.qualified} évaluées · médiane {row.medianScore}
+                {row.qualified} qualified · median {row.medianScore}
               </p>
             </div>
           ))}
         </div>
         {result.insufficient.length > 0 && (
           <p className="text-xs text-slate-400 mt-3" data-testid="portal-insufficient">
-            Volume insuffisant :{' '}
+            Insufficient volume:{' '}
             {result.insufficient.map((p, i) => (
               <React.Fragment key={p.portal}>
                 {i > 0 && ' · '}

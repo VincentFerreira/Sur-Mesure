@@ -9,15 +9,15 @@ import { Theme, matchTheme, OTHER_THEME_ID } from './insightsThemes';
 export const SIGNAL_THEMES: Theme[] = [
   {
     id: 'onsite',
-    label: 'Présentiel imposé',
-    patterns: ['sur site', 'presentiel', 'sur place', 'no remote', 'pas de teletravail', 'sans teletravail', '100 presentiel'],
+    label: 'Onsite required',
+    patterns: ['sur site', 'presentiel', 'sur place', 'no remote', 'pas de teletravail', 'sans teletravail', '100 presentiel', 'onsite'],
   },
-  { id: 'remote', label: 'Télétravail', patterns: ['teletravail', 'remote', 'distanciel', 'hybride', 'hybrid'] },
-  { id: 'esn', label: 'ESN / régie', patterns: ['esn', 'regie', 'ssii', 'consulting', 'prestataire', 'prestation', 'cabinet'] },
-  { id: 'contract', label: 'Contrat', patterns: ['cdi', 'cdd', 'freelance', 'alternance', 'stage', 'interim', 'portage', 'contrat'] },
+  { id: 'remote', label: 'Remote', patterns: ['teletravail', 'remote', 'distanciel', 'hybride', 'hybrid'] },
+  { id: 'esn', label: 'Staffing agency', patterns: ['esn', 'regie', 'ssii', 'consulting', 'prestataire', 'prestation', 'cabinet'] },
+  { id: 'contract', label: 'Contract type', patterns: ['cdi', 'cdd', 'freelance', 'alternance', 'stage', 'interim', 'portage', 'contrat'] },
   {
     id: 'seniority',
-    label: 'Séniorité',
+    label: 'Seniority',
     patterns: [
       'seniorite',
       'senior',
@@ -30,25 +30,25 @@ export const SIGNAL_THEMES: Theme[] = [
       'debutant',
     ],
   },
-  { id: 'salary', label: 'Salaire', patterns: ['salaire', 'remuneration', 'tjm', 'package', 'budget', 'keur', 'k euros'] },
+  { id: 'salary', label: 'Salary', patterns: ['salaire', 'remuneration', 'tjm', 'package', 'budget', 'keur', 'k euros'] },
   {
     id: 'stack',
-    label: 'Stack technique',
+    label: 'Tech stack',
     patterns: ['stack', 'techno', 'outil', 'framework', 'langage', 'competences techniques', 'automatisation', 'certification'],
   },
-  { id: 'cvMatch', label: 'Adéquation CV', patterns: ['cv', 'profil aligne', 'ecart profil', 'parcours'] },
-  { id: 'location', label: 'Localisation', patterns: ['localisation', 'deplacement', 'mobilite', 'trajet', 'region', 'zone', 'hors zone'] },
-  { id: 'scope', label: 'Intitulé / périmètre', patterns: ['intitule', 'perimetre', 'metier', 'fonction', 'hors cible', 'poste adjacent'] },
-  { id: 'language', label: 'Langue', patterns: ['anglais', 'english', 'bilingue', 'allemand', 'langue'] },
+  { id: 'cvMatch', label: 'CV match', patterns: ['cv', 'profil aligne', 'ecart profil', 'parcours'] },
+  { id: 'location', label: 'Location', patterns: ['localisation', 'location', 'deplacement', 'mobilite', 'trajet', 'region', 'zone', 'hors zone'] },
+  { id: 'scope', label: 'Title / scope', patterns: ['intitule', 'title', 'perimetre', 'metier', 'fonction', 'hors cible', 'poste adjacent'] },
+  { id: 'language', label: 'Language', patterns: ['anglais', 'english', 'bilingue', 'allemand', 'langue'] },
   {
     id: 'freshness',
-    label: "Fraîcheur de l'offre",
+    label: 'Job freshness',
     patterns: ['offre ancienne', 'perimee', 'date de publication', 'publiee il y a'],
   },
 ];
 
 const SIGNAL_THEME_LABELS: Record<string, string> = Object.fromEntries(SIGNAL_THEMES.map((t) => [t.id, t.label]));
-SIGNAL_THEME_LABELS[OTHER_THEME_ID] = 'Autre';
+SIGNAL_THEME_LABELS[OTHER_THEME_ID] = 'Other';
 
 const MAX_SAMPLES = 3;
 

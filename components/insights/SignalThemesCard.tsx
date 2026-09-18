@@ -18,7 +18,7 @@ const SignalThemesCard: React.FC<Props> = ({ title, testId, emptyTestId, polarit
   <InsightCard title={title} testId={testId}>
     {result.rows.length === 0 ? (
       <p className="text-sm text-slate-400" data-testid={emptyTestId}>
-        Pas encore assez d'offres évaluées pour dégager une tendance.
+        Not enough qualified jobs yet to surface a trend.
       </p>
     ) : (
       <div className="space-y-2.5">
@@ -36,7 +36,7 @@ const SignalThemesCard: React.FC<Props> = ({ title, testId, emptyTestId, polarit
                 title={row.samples.join(' · ')}
               />
               {isOther && row.samples.length > 0 && (
-                <p className="text-xs text-slate-400 mt-0.5 ml-[calc(10rem+0.75rem)]">ex. : {row.samples.join(' · ')}</p>
+                <p className="text-xs text-slate-400 mt-0.5 ml-[calc(10rem+0.75rem)]">e.g. {row.samples.join(' · ')}</p>
               )}
             </div>
           );

@@ -7,10 +7,10 @@ interface Props {
 }
 
 const FormattingChecksCard: React.FC<Props> = ({ rows }) => (
-  <InsightCard title="Problèmes de forme récurrents" testId="insight-card-formatting">
+  <InsightCard title="Recurring formatting issues" testId="insight-card-formatting">
     {rows.length === 0 ? (
       <p className="text-sm text-slate-400" data-testid="insight-empty-formatting">
-        Aucun problème de forme récurrent détecté.
+        No recurring formatting issue detected.
       </p>
     ) : (
       <ul className="space-y-2.5">
@@ -19,7 +19,7 @@ const FormattingChecksCard: React.FC<Props> = ({ rows }) => (
             <span className={`w-2 h-2 rounded-full shrink-0 ${row.fail > 0 ? 'bg-red-400' : 'bg-amber-400'}`} />
             <span className="text-slate-700 font-medium">{row.label}</span>
             <span className="text-xs text-slate-400">
-              échoue sur {row.fail + row.warning} des {row.total} analyses
+              fails on {row.fail + row.warning} of {row.total} analyses
             </span>
           </li>
         ))}

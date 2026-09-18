@@ -73,7 +73,7 @@ function workModeMatches(detectedWorkMode, targetWorkModes) {
     return targetWorkModes.includes(detectedWorkMode);
 }
 
-const WORK_MODE_LABELS_FR = { onsite: 'Sur site', hybrid: 'Hybride', remote: 'Télétravail' };
+const WORK_MODE_LABELS = { onsite: 'Onsite', hybrid: 'Hybrid', remote: 'Remote' };
 
 // Base scores per bucket, spaced well inside each threshold band (see
 // server/scrapers/scraperFit.js) so a one-level downgrade below always lands in the
@@ -106,26 +106,26 @@ export async function qualifyAll(candidates, jobTitles, locations, cvText, workM
         let score = overlap >= 2 ? BASE_SCORE.high : overlap === 1 ? BASE_SCORE.medium : BASE_SCORE.low;
         const signals = [
             overlap >= 2
-                ? { label: 'Titre aligné', polarity: 'positive' }
+                ? { label: 'Title aligned', polarity: 'positive' }
                 : overlap === 1
-                  ? { label: 'Titre partiel', polarity: 'neutral' }
-                  : { label: 'Titre hors-sujet', polarity: 'negative' },
+                  ? { label: 'Partial title match', polarity: 'neutral' }
+                  : { label: 'Off-topic title', polarity: 'negative' },
         ];
 
         const locOk = locationMatches(c.location, locations);
         if (!locOk) {
             score = Math.max(0, score - DOWNGRADE_STEP);
-            signals.push({ label: 'Localisation', polarity: 'negative' });
+            signals.push({ label: 'Location', polarity: 'negative' });
         } else if (locations.length > 0) {
-            signals.push({ label: 'Localisation', polarity: 'positive' });
+            signals.push({ label: 'Location', polarity: 'positive' });
         }
 
         const detectedWorkMode = detectWorkMode(c);
         if (!workModeMatches(detectedWorkMode, workModes)) {
             score = Math.max(0, score - DOWNGRADE_STEP);
-            signals.push({ label: `${WORK_MODE_LABELS_FR[detectedWorkMode]} non souhaité`, polarity: 'negative' });
+            signals.push({ label: `${WORK_MODE_LABELS[detectedWorkMode]} not wanted`, polarity: 'negative' });
         } else if (workModes.length > 0 && detectedWorkMode) {
-            signals.push({ label: 'Mode de travail aligné', polarity: 'positive' });
+            signals.push({ label: 'Work mode aligned', polarity: 'positive' });
         }
 
         if (cvWords) {
@@ -133,16 +133,16 @@ export async function qualifyAll(candidates, jobTitles, locations, cvText, workM
             const cvOverlap = [...descWords].filter((w) => cvWords.has(w)).length;
             if (cvOverlap === 0) {
                 score = Math.max(0, score - DOWNGRADE_STEP);
-                signals.push({ label: 'Écart CV', polarity: 'negative' });
+                signals.push({ label: 'CV mismatch', polarity: 'negative' });
             } else {
-                signals.push({ label: 'CV aligné', polarity: 'positive' });
+                signals.push({ label: 'CV aligned', polarity: 'positive' });
             }
         }
 
         const rejectedMatch = rejectedSameCompany(c, rejectionMemory);
         if (rejectedMatch) {
             score = Math.max(0, score - DOWNGRADE_STEP);
-            signals.push({ label: 'Comme rejet précédent', polarity: 'negative' });
+            signals.push({ label: 'Similar to a past rejection', polarity: 'negative' });
         }
 
         map[c.id] = { fit: fitFromScore(score, mediumThreshold), score, signals: signals.slice(0, MAX_SIGNALS) };

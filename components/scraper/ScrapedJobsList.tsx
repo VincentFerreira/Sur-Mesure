@@ -45,15 +45,15 @@ function groupCandidates(candidates: ScrapedJob[]): Group[] {
   return groups;
 }
 
-// "Tri : inédites en premier, puis le tri actuel (fit, puis récence)." The unseen
+// "Sort: unseen first, then the current sort (fit, then recency)." The unseen
 // partition keeps the exact tier-grouping/header/testid logic above, applied
-// unchanged. The seen ("déjà vues") partition is rendered as a single flat block,
+// unchanged. The seen partition is rendered as a single flat block,
 // same fit-rank-then-score ordering but WITHOUT per-tier sub-headers — giving it its
 // own headers would produce duplicate data-testid="scraped-jobs-group-high" (etc.)
 // whenever both partitions have candidates in the same tier, which breaks
-// Playwright's getByTestId (strict-mode multi-match). A single "N déjà vues"
-// separator is also exactly what the spec's wording asks for ("le bloc des inédites
-// et le reste" — singular).
+// Playwright's getByTestId (strict-mode multi-match). A single "N already seen"
+// separator is also exactly what the spec's wording asks for (the unseen block
+// and the rest — singular).
 const ScrapedJobsList: React.FC<Props> = ({ candidates, onImport, onDismiss, onMarkViewed }) => {
   const unseen = candidates.filter((c) => !c.viewedAt);
   const seen = candidates.filter((c) => c.viewedAt);
@@ -85,7 +85,7 @@ const ScrapedJobsList: React.FC<Props> = ({ candidates, onImport, onDismiss, onM
         <section className="mb-6">
           <h3 className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-2" data-testid="scraped-jobs-seen-separator">
             <span className="flex-1 border-t border-slate-200" />
-            {seen.length} déjà vues
+            {seen.length} already seen
             <span className="flex-1 border-t border-slate-200" />
           </h3>
           <div className="space-y-1">

@@ -15,14 +15,14 @@ import { serializeCVForATS } from '../services/aiService';
 import { loadCV } from '../services/cvStorageService';
 
 const TABS: ScrapedJobStatus[] = ['new', 'dismissed', 'imported'];
-const TAB_LABELS: Record<ScrapedJobStatus, string> = { new: 'Nouvelles', dismissed: 'Écartées', imported: 'Importées' };
+const TAB_LABELS: Record<ScrapedJobStatus, string> = { new: 'New', dismissed: 'Dismissed', imported: 'Imported' };
 
 type PipelineStage = 'idle' | 'expanding' | 'searching' | 'qualifying';
 const STAGE_LABELS: Record<PipelineStage, string> = {
-  idle: 'Lancer un scrape',
-  expanding: 'Élargissement des mots-clés…',
-  searching: 'Recherche…',
-  qualifying: 'Analyse des résultats…',
+  idle: 'Run a scrape',
+  expanding: 'Expanding keywords…',
+  searching: 'Searching…',
+  qualifying: 'Analyzing results…',
 };
 
 const JobSearchPage: React.FC = () => {
@@ -48,7 +48,7 @@ const JobSearchPage: React.FC = () => {
   const [tab, setTab] = useState<ScrapedJobStatus>('new');
   const [importing, setImporting] = useState<ScrapedJob | null>(null);
   const [stage, setStage] = useState<PipelineStage>('idle');
-  // Set only by the post-scrape banner's "Voir les N" button — a passive affordance,
+  // Set only by the post-scrape banner's "View the N" button — a passive affordance,
   // not an independent persistent toggle, so clicking any tab button directly resets it.
   const [unviewedOnly, setUnviewedOnly] = useState(false);
   // JobForm stays mounted (returns null) while closed, so its useState initializers only
@@ -76,8 +76,8 @@ const JobSearchPage: React.FC = () => {
     [candidates]
   );
 
-  // "Inédite" = status 'new' AND never viewed — matches exactly the population the
-  // "Nouvelles" tab already shows, and is where "Voir les N" naturally navigates to.
+  // "Unseen" = status 'new' AND never viewed — matches exactly the population the
+  // "New" tab already shows, and is where "View the N" naturally navigates to.
   // Scoping to status 'new' (not "any unviewed") deliberately excludes an
   // already-dismissed/imported candidate: nobody still needs to act on it, even if
   // literally nobody's eyes were ever on it.
@@ -182,12 +182,12 @@ const JobSearchPage: React.FC = () => {
     <div className="h-full overflow-y-auto" data-testid="job-search-page">
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-xl font-bold text-slate-800">Découverte</h1>
+          <h1 className="text-xl font-bold text-slate-800">Discovery</h1>
           <button
             onClick={handleRunSearch}
             disabled={stage !== 'idle' || !hasJobTitles}
             data-testid="run-scrape-button"
-            title={hasJobTitles ? undefined : 'Renseignez au moins un intitulé de poste dans les Préférences'}
+            title={hasJobTitles ? undefined : 'Fill in at least one job title in Preferences'}
             className="flex items-center gap-1.5 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
             {stage !== 'idle' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radar className="w-4 h-4" />}
@@ -213,17 +213,17 @@ const JobSearchPage: React.FC = () => {
 
         {lastScrapeAt && (
           <p className="text-xs text-slate-400 mb-4">
-            Dernier scrape {formatRelativeDate(lastScrapeAt)} · {candidates.length} offres
+            Last scrape {formatRelativeDate(lastScrapeAt)} · {candidates.length} jobs
           </p>
         )}
 
         {!hasJobTitles && (
           <p className="text-sm text-slate-400 mb-4">
-            Aucun intitulé de poste configuré.{' '}
+            No job title configured.{' '}
             <Link to="/preferences" className="text-indigo-600 hover:text-indigo-800 font-medium">
-              Renseignez vos préférences de recherche
+              Fill in your search preferences
             </Link>{' '}
-            pour lancer une recherche.
+            to run a search.
           </p>
         )}
 
@@ -233,7 +233,7 @@ const JobSearchPage: React.FC = () => {
               .filter((e) => e.error)
               .map((e) => (
                 <p key={e.portal}>
-                  {portalLabel(e.portal)} indisponible ({e.error})
+                  {portalLabel(e.portal)} unavailable ({e.error})
                 </p>
               ))}
           </div>
@@ -242,12 +242,11 @@ const JobSearchPage: React.FC = () => {
         {lastRunReport && unviewedNew.length > 0 && (
           <div className="bg-sky-50 border border-sky-100 rounded-lg px-4 py-3 mb-4" data-testid="unseen-banner">
             <p className="text-sm font-medium text-sky-900">
-              {unviewedNew.length} offre{unviewedNew.length > 1 ? 's' : ''} inédite{unviewedNew.length > 1 ? 's' : ''}, dont{' '}
-              {unviewedNewHighFit} en correspondance forte
+              {unviewedNew.length} new job{unviewedNew.length > 1 ? 's' : ''}, including{' '}
+              {unviewedNewHighFit} high-fit match{unviewedNewHighFit > 1 ? 'es' : ''}
             </p>
             <p className="text-xs text-sky-700 mt-1">
-              {totalReturnedThisRun} remontée{totalReturnedThisRun > 1 ? 's' : ''} · {alreadyKnownThisRun} déjà connue
-              {alreadyKnownThisRun > 1 ? 's' : ''}
+              {totalReturnedThisRun} returned · {alreadyKnownThisRun} already known
               {newByPortal.length > 0 &&
                 newByPortal.map(([portal, count]) => (
                   <React.Fragment key={portal}>
@@ -264,7 +263,7 @@ const JobSearchPage: React.FC = () => {
               data-testid="view-unseen-button"
               className="text-xs font-semibold text-sky-700 underline mt-2"
             >
-              Voir les {unviewedNew.length}
+              View the {unviewedNew.length}
             </button>
           </div>
         )}
@@ -295,9 +294,9 @@ const JobSearchPage: React.FC = () => {
               data-testid="mark-all-viewed-button"
               className="text-xs font-medium text-slate-500 hover:text-slate-700"
             >
-              Tout marquer comme vu
+              Mark all as viewed
             </button>
-            <span className="text-xs text-slate-400">↑↓ Fit, puis récence</span>
+            <span className="text-xs text-slate-400">↑↓ Fit, then recency</span>
           </div>
         </div>
 
@@ -310,7 +309,7 @@ const JobSearchPage: React.FC = () => {
         {!loading && visibleCandidates.length === 0 && (
           <div className="text-center py-16 text-slate-400">
             <Radar className="w-8 h-8 mx-auto mb-3 text-slate-300" />
-            <p className="text-slate-500 font-medium">Aucune offre {TAB_LABELS[tab].toLowerCase()}.</p>
+            <p className="text-slate-500 font-medium">No {TAB_LABELS[tab].toLowerCase()} job.</p>
           </div>
         )}
 

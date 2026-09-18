@@ -11,23 +11,6 @@ export const STATUS_META: Record<JobStatus, { label: string; className: string }
   archived: { label: 'Archived', className: 'bg-slate-100 text-slate-400' },
 };
 
-// French labels for JobStatus, used by the Analyse page's pipeline funnel. Kept
-// separate from STATUS_META.label (which stays English) rather than translating it in
-// place — that label is also rendered by JobsPage/JobsTable/JobsKanban filter pills and
-// asserted on by existing e2e specs (e.g. expecting "Lead"/"Status changed: Lead →
-// Applied"). A full French pass over STATUS_META is a separate, larger effort; this is
-// its landing point when that happens.
-export const STATUS_LABELS_FR: Record<JobStatus, string> = {
-  lead: 'Piste',
-  to_apply: 'À postuler',
-  applied: 'Candidature envoyée',
-  screening: 'Préqualification',
-  interview: 'Entretien',
-  offer: 'Offre',
-  rejected: 'Refusé',
-  archived: 'Archivé',
-};
-
 export const PRIORITY_META: Record<1 | 2 | 3, { label: string; className: string }> = {
   1: { label: 'High', className: 'text-red-600' },
   2: { label: 'Medium', className: 'text-amber-600' },

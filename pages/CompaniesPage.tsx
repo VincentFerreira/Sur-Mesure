@@ -90,7 +90,7 @@ const CompaniesPage: React.FC = () => {
     <div className="h-full overflow-y-auto" data-testid="companies-page">
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-xl font-bold text-slate-800">Entreprises</h1>
+          <h1 className="text-xl font-bold text-slate-800">Companies</h1>
           <div className="flex items-center gap-2">
             {missingFromJobs.length > 0 && (
               <button

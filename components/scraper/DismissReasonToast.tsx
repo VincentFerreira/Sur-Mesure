@@ -30,12 +30,12 @@ const DismissReasonToast: React.FC<Props> = ({ title, onSave, onClose }) => {
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs text-slate-500">
-          <span className="font-medium text-slate-700">{title}</span> écartée.
+          <span className="font-medium text-slate-700">{title}</span> dismissed.
         </p>
         <button
           onClick={onClose}
           data-testid="dismiss-reason-toast-close"
-          aria-label="Fermer"
+          aria-label="Close"
           className="text-slate-300 hover:text-slate-500 shrink-0"
         >
           <X className="w-3.5 h-3.5" />
@@ -47,7 +47,7 @@ const DismissReasonToast: React.FC<Props> = ({ title, onSave, onClose }) => {
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
-          placeholder="Pourquoi ? (optionnel)"
+          placeholder="Why? (optional)"
           data-testid="dismiss-reason-input"
           className="flex-1 text-xs border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-300"
         />

@@ -275,7 +275,7 @@ describe('searchAll live progress (claudeCli)', () => {
         mockSpawn.mockReturnValue(makeFakeChild([toolUseEvent('t1', 'WebSearch', { query: 'QA Engineer Paris' }), resultEvent('[]')]));
         await searchAll({ jobTitles: ['QA Engineer'], locations: [] });
         const { events } = getProgress();
-        expect(events[0]).toMatchObject({ message: 'Recherche : QA Engineer Paris', status: 'pending' });
+        expect(events[0]).toMatchObject({ message: 'Searching: QA Engineer Paris', status: 'pending' });
     });
 
     // The "done" line is deliberately worded differently from the "pending" line for
@@ -292,8 +292,8 @@ describe('searchAll live progress (claudeCli)', () => {
         );
         await searchAll({ jobTitles: ['QA Engineer'], locations: [] });
         const { events } = getProgress();
-        expect(events[0]).toMatchObject({ message: 'Vérification : example.test', status: 'pending' });
-        expect(events[1]).toMatchObject({ message: 'Page vérifiée : example.test', status: 'done' });
+        expect(events[0]).toMatchObject({ message: 'Checking: example.test', status: 'pending' });
+        expect(events[1]).toMatchObject({ message: 'Page checked: example.test', status: 'done' });
         expect(events[1].message).not.toBe(events[0].message);
     });
 
@@ -307,7 +307,7 @@ describe('searchAll live progress (claudeCli)', () => {
         );
         await searchAll({ jobTitles: ['QA Engineer'], locations: [] });
         const { events } = getProgress();
-        expect(events[1]).toMatchObject({ message: 'Échec (HTTP 403) : www.welcometothejungle.com', status: 'failed' });
+        expect(events[1]).toMatchObject({ message: 'Failed (HTTP 403): www.welcometothejungle.com', status: 'failed' });
     });
 
     it('pushes a "done" event for a WebSearch that succeeds, naming the result count instead of repeating the query', async () => {
@@ -320,8 +320,8 @@ describe('searchAll live progress (claudeCli)', () => {
         );
         await searchAll({ jobTitles: ['QA Engineer'], locations: [] });
         const { events } = getProgress();
-        expect(events[0]).toMatchObject({ message: 'Recherche : QA Engineer Paris', status: 'pending' });
-        expect(events[1]).toMatchObject({ message: '→ 2 résultats pour : QA Engineer Paris', status: 'done' });
+        expect(events[0]).toMatchObject({ message: 'Searching: QA Engineer Paris', status: 'pending' });
+        expect(events[1]).toMatchObject({ message: '→ 2 results for: QA Engineer Paris', status: 'done' });
     });
 });
 

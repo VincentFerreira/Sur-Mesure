@@ -201,7 +201,7 @@ const LatexViewer: React.FC<LatexViewerProps> = ({ data }) => {
                 </span>
               )}
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-xs text-slate-400">Police :</span>
+                <span className="text-xs text-slate-400">Font:</span>
                 <FontSelector value={fontId} onChange={setFont} />
               </div>
               {fontError && <span className="text-xs text-red-400 shrink-0">{fontError}</span>}
@@ -209,10 +209,10 @@ const LatexViewer: React.FC<LatexViewerProps> = ({ data }) => {
                 <button
                   onClick={handleResetTemplate}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors"
-                  title="Revenir au template par défaut"
+                  title="Reset to the default template"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  Réinitialiser
+                  Reset
                 </button>
               )}
               <button
@@ -220,7 +220,7 @@ const LatexViewer: React.FC<LatexViewerProps> = ({ data }) => {
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${templateSaved ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
               >
                 {templateSaved ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
-                {templateSaved ? 'Sauvegardé !' : 'Sauvegarder'}
+                {templateSaved ? 'Saved!' : 'Save'}
               </button>
               <button
                 onClick={() => compile(generateLatex(data, templateCode, fontId), photoData)}
@@ -323,9 +323,9 @@ const LatexViewer: React.FC<LatexViewerProps> = ({ data }) => {
           </>
         ) : (
           <span className="text-xs text-slate-500">
-            Syntaxe Mustache · <code className="bg-slate-700 px-1 rounded text-slate-400">[[variable]]</code> —
-            boucles <code className="bg-slate-700 px-1 rounded text-slate-400">[[# items ]]..[[/ items ]]</code> —
-            conditionnels <code className="bg-slate-700 px-1 rounded text-slate-400">[[^ champ ]]</code>
+            Mustache syntax · <code className="bg-slate-700 px-1 rounded text-slate-400">[[variable]]</code> —
+            loops <code className="bg-slate-700 px-1 rounded text-slate-400">[[# items ]]..[[/ items ]]</code> —
+            conditionals <code className="bg-slate-700 px-1 rounded text-slate-400">[[^ field ]]</code>
           </span>
         )}
       </div>

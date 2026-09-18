@@ -84,20 +84,20 @@ export function topMissingKeywords(jobs: Job[], limit = TOP_KEYWORDS): MissingKe
 // Order matters: 'dates' must precede 'bullets' since "consistent date formats"
 // contains the substring "format".
 export const FORMATTING_THEMES: Theme[] = [
-  { id: 'contact', label: 'Coordonnées complètes', patterns: ['contact', 'coordonnees', 'email', 'telephone', 'linkedin'] },
-  { id: 'dates', label: 'Format des dates', patterns: ['date'] },
+  { id: 'contact', label: 'Complete contact info', patterns: ['contact', 'coordonnees', 'email', 'telephone', 'linkedin'] },
+  { id: 'dates', label: 'Date formatting', patterns: ['date'] },
   {
     id: 'achievements',
-    label: 'Résultats chiffrés',
+    label: 'Quantified results',
     patterns: ['achievement', 'measurable', 'quantif', 'metric', 'chiffre', 'resultat', 'realisation'],
   },
-  { id: 'actionVerbs', label: "Verbes d'action", patterns: ['action verb', 'verbe', 'action'] },
-  { id: 'stuffing', label: 'Bourrage de mots-clés', patterns: ['stuffing', 'bourrage', 'keyword density', 'repetition'] },
-  { id: 'bullets', label: 'Puces / mise en forme', patterns: ['bullet', 'puce', 'liste', 'format'] },
+  { id: 'actionVerbs', label: 'Action verbs', patterns: ['action verb', 'verbe', 'action'] },
+  { id: 'stuffing', label: 'Keyword stuffing', patterns: ['stuffing', 'bourrage', 'keyword density', 'repetition'] },
+  { id: 'bullets', label: 'Bullets / formatting', patterns: ['bullet', 'puce', 'liste', 'format'] },
 ];
 
 const FORMATTING_THEME_LABELS: Record<string, string> = Object.fromEntries(FORMATTING_THEMES.map((t) => [t.id, t.label]));
-FORMATTING_THEME_LABELS[OTHER_THEME_ID] = 'Autre';
+FORMATTING_THEME_LABELS[OTHER_THEME_ID] = 'Other';
 
 export interface FormattingThemeRow {
   themeId: string;

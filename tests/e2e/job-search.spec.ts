@@ -149,7 +149,7 @@ test('importing a scraped job prefills JobForm, creates a real job, and moves th
   await expect(page.locator('tr', { hasText: company })).toBeVisible();
 });
 
-test('an unviewed candidate shows the unseen dot; a viewed one renders under "déjà vues"', async ({ page, request }) => {
+test('an unviewed candidate shows the unseen dot; a viewed one renders under "already seen"', async ({ page, request }) => {
   test.skip(!(await testHooksAvailable(request)), 'Test hooks not enabled on this server instance.');
 
   const suffix = unique();
@@ -185,11 +185,11 @@ test('an unviewed candidate shows the unseen dot; a viewed one renders under "d�
   await page.goto('/job-search');
   await expect(page.getByTestId(`scraped-job-unseen-dot-${unseenCandidate.id}`).locator('span')).toBeVisible();
   await expect(page.getByTestId(`scraped-job-unseen-dot-${seenCandidate.id}`).locator('span')).not.toBeVisible();
-  await expect(page.getByTestId('scraped-jobs-seen-separator')).toContainText('déjà vues');
+  await expect(page.getByTestId('scraped-jobs-seen-separator')).toContainText('already seen');
   await expect(page.getByTestId(`scraped-job-row-${seenCandidate.id}`)).toBeVisible();
 });
 
-test('"Tout marquer comme vu" keeps dots visible until the next page load, per spec', async ({ page, request }) => {
+test('"Mark all as viewed" keeps dots visible until the next page load, per spec', async ({ page, request }) => {
   test.skip(!(await testHooksAvailable(request)), 'Test hooks not enabled on this server instance.');
 
   const suffix = unique();
@@ -261,7 +261,7 @@ test('scrolling a row into view for 1s marks it viewed, surviving a reload', asy
   await expect(page.getByTestId(`scraped-job-unseen-dot-${target.id}`).locator('span')).not.toBeVisible();
 });
 
-test('the sidebar badges "Découverte" with the unviewed-new count', async ({ page, request }) => {
+test('the sidebar badges "Discovery" with the unviewed-new count', async ({ page, request }) => {
   test.skip(!(await testHooksAvailable(request)), 'Test hooks not enabled on this server instance.');
 
   const suffix = unique();
@@ -310,14 +310,14 @@ test('a qualified candidate renders its score, tier group, and chips', async ({ 
   await request.post(`${API_URL}/api/__test__/seed`, { data: { scrapedJobs: [candidate] } });
 
   await page.goto('/job-search');
-  await expect(page.getByTestId('scraped-jobs-group-high')).toContainText('Fort · 1');
+  await expect(page.getByTestId('scraped-jobs-group-high')).toContainText('High · 1');
   await expect(page.getByTestId(`scraped-job-score-${candidate.id}`)).toContainText('92');
   await expect(page.getByTestId(`scraped-job-signal-${candidate.id}-0`)).toContainText('Playwright');
   await expect(page.getByTestId(`scraped-job-portal-${candidate.id}`)).toContainText('France Travail');
 });
 
 // Highest flake-risk test in this file: it's the only one driving a real
-// POST /scraper/run (via "Lancer un scrape"), which depends on the shared
+// POST /scraper/run (via "Run a scrape"), which depends on the shared
 // SearchPreferences singleton that tests/e2e/preferences.spec.ts also mutates — the
 // exact cross-file race this spec's other tests deliberately sidestep via seeding
 // (see the file-level comment above). If this proves unstable in CI, remove it rather
@@ -333,8 +333,8 @@ test('the post-scrape banner reports unseen offers and a per-portal new-count af
   await expect(page.getByTestId('run-scrape-button')).toBeEnabled({ timeout: 15000 });
 
   await expect(page.getByTestId('unseen-banner')).toBeVisible();
-  await expect(page.getByTestId('unseen-banner')).toContainText('inédite');
-  await expect(page.getByTestId('unseen-banner')).toContainText('en correspondance forte');
+  await expect(page.getByTestId('unseen-banner')).toContainText('new job');
+  await expect(page.getByTestId('unseen-banner')).toContainText('high-fit match');
   await expect(page.getByTestId('view-unseen-button')).toBeVisible();
 
   await page.getByTestId('view-unseen-button').click();

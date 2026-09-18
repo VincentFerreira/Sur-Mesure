@@ -2,20 +2,20 @@ import { test, expect } from '@playwright/test';
 import { testHooksAvailable, unique } from '../helpers/jobs';
 import { API_URL } from '../helpers/apiUrl';
 
-// The Analyse page's cards aggregate across ALL discoveries/jobs in the shared data
+// The Insights page's cards aggregate across ALL discoveries/jobs in the shared data
 // directory (playwright.config.ts runs fullyParallel against one dir that other specs
 // also write into), so assertions here check that the right row/section renders, never
 // an exact count or percentage — exact-number correctness is covered by the
 // __tests__/lib/insights*.test.ts unit suite instead. Portal ids are synthesized
 // per-test (unique()) precisely so the per-portal yield card's aggregation can never be
 // polluted by another spec's or another run's seeded candidates. Seeded candidates use
-// status 'dismissed' rather than 'new' so they never surface in the Découverte page's
-// default "Nouvelles" tab, whose own tests (tests/e2e/job-search.spec.ts) assert exact
-// per-tier counts there — 'dismissed' still counts identically for every Analyse metric
+// status 'dismissed' rather than 'new' so they never surface in the Discovery page's
+// default "New" tab, whose own tests (tests/e2e/job-search.spec.ts) assert exact
+// per-tier counts there — 'dismissed' still counts identically for every Insights metric
 // here (none of them filter by status except reviewConversion, which isn't exercised in
 // this file).
 
-test('a negative signal theme renders on the Découverte section', async ({ page, request }) => {
+test('a negative signal theme renders on the Discovery section', async ({ page, request }) => {
   test.skip(!(await testHooksAvailable(request)), 'Test hooks not enabled on this server instance.');
 
   const suffix = unique();
@@ -40,10 +40,10 @@ test('a negative signal theme renders on the Découverte section', async ({ page
 
   await page.goto('/insights');
   await expect(page.getByTestId('insights-section-search')).toBeVisible();
-  await expect(page.getByTestId('signal-theme-negative-onsite')).toContainText('Présentiel imposé');
+  await expect(page.getByTestId('signal-theme-negative-onsite')).toContainText('Onsite required');
 });
 
-test('candidates without a score render an explicit "Non évalué" row, not silently dropped', async ({ page, request }) => {
+test('candidates without a score render an explicit "Not qualified" row, not silently dropped', async ({ page, request }) => {
   test.skip(!(await testHooksAvailable(request)), 'Test hooks not enabled on this server instance.');
 
   const suffix = unique();
@@ -64,7 +64,7 @@ test('candidates without a score render an explicit "Non évalué" row, not sile
 
   await page.goto('/insights');
   await expect(page.getByTestId('fit-row-unqualified')).toBeVisible();
-  await expect(page.getByTestId('insight-card-fit')).toContainText('non évaluées');
+  await expect(page.getByTestId('insight-card-fit')).toContainText('not qualified');
 });
 
 test('a low-volume portal is listed as insufficient rather than ranked', async ({ page, request }) => {
@@ -91,7 +91,7 @@ test('a low-volume portal is listed as insufficient rather than ranked', async (
   await request.post(`${API_URL}/api/__test__/seed`, { data: { scrapedJobs: candidates } });
 
   await page.goto('/insights');
-  await expect(page.getByTestId('portal-insufficient')).toContainText('Volume insuffisant');
+  await expect(page.getByTestId('portal-insufficient')).toContainText('Insufficient volume');
   await expect(page.getByTestId('portal-insufficient')).toContainText(portal);
 });
 
@@ -147,8 +147,8 @@ test('the CV section renders missing keywords (case-merged) and a recurring form
   await page.goto('/insights');
   await expect(page.getByTestId(`missing-keyword-${uniqueKeyword}`)).toBeVisible();
   await expect(page.getByTestId('missing-keyword-TypeScript')).toBeVisible();
-  await expect(page.getByTestId('missing-keyword-TypeScript')).toContainText('manquant dans 3 postes');
-  await expect(page.getByTestId('formatting-row-dates')).toContainText('Format des dates');
+  await expect(page.getByTestId('missing-keyword-TypeScript')).toContainText('missing in 3 jobs');
+  await expect(page.getByTestId('formatting-row-dates')).toContainText('Date formatting');
   await expect(page.getByTestId('ats-score-current')).toBeVisible();
   await expect(page.getByTestId('ats-score-estimated')).toBeVisible();
 });
@@ -174,15 +174,15 @@ test('a job rejected after reaching interview shows up in the funnel exits, not 
 
   await page.goto('/insights');
   await expect(page.getByTestId('funnel-stage-interview')).toBeVisible();
-  await expect(page.getByTestId('funnel-exits')).toContainText('Entretien');
+  await expect(page.getByTestId('funnel-exits')).toContainText('Interview');
 });
 
-test('the page copy is French, with no leftover English labels from the old cards', async ({ page, request }) => {
+test('the page copy is English, with no leftover French labels from the old cards', async ({ page, request }) => {
   test.skip(!(await testHooksAvailable(request)), 'Test hooks not enabled on this server instance.');
 
   await page.goto('/insights');
-  await expect(page.getByRole('heading', { name: 'Analyse' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Insights' })).toBeVisible();
   const text = await page.getByTestId('insights-page').innerText();
-  expect(text).not.toContain('Score distribution');
-  expect(text).not.toContain('Top missing keywords');
+  expect(text).not.toContain('Répartition des scores');
+  expect(text).not.toContain('Mots-clés manquants les plus fréquents');
 });

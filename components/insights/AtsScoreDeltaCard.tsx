@@ -7,10 +7,10 @@ interface Props {
 }
 
 const AtsScoreDeltaCard: React.FC<Props> = ({ delta }) => (
-  <InsightCard title="Score ATS moyen et gain potentiel" testId="insight-card-ats-score">
+  <InsightCard title="Average ATS score and potential gain" testId="insight-card-ats-score">
     {!delta.sufficient ? (
       <p className="text-sm text-slate-400" data-testid="insight-empty-ats-score">
-        Pas assez de scores pour une moyenne fiable ({delta.scoredCount}/{ATS_THRESHOLDS.MIN_ATS_N}).
+        Not enough scores for a reliable average ({delta.scoredCount}/{ATS_THRESHOLDS.MIN_ATS_N}).
       </p>
     ) : (
       <>
@@ -28,7 +28,7 @@ const AtsScoreDeltaCard: React.FC<Props> = ({ delta }) => (
           <div className="h-full bg-emerald-400" style={{ width: `${delta.gain}%` }} data-testid="ats-score-delta" />
         </div>
         <p className="text-xs text-slate-400 mt-3">
-          Gain estimé par l'analyse si vous appliquez les recommandations : +{delta.gain} pts (sur {delta.scoredCount} postes).
+          Estimated gain if you apply the recommendations: +{delta.gain} pts (across {delta.scoredCount} jobs).
         </p>
       </>
     )}

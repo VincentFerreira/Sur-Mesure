@@ -154,7 +154,7 @@ const JobDetail: React.FC<Props> = ({ jobId }) => {
         <div className="text-center text-slate-400">
           <p className="mb-1 text-slate-500 font-medium">Job not found.</p>
           <button onClick={() => navigate('/jobs')} className="text-indigo-600 hover:text-indigo-800 text-sm font-medium">
-            Back to Postes
+            Back to Jobs
           </button>
         </div>
       </div>
@@ -166,7 +166,7 @@ const JobDetail: React.FC<Props> = ({ jobId }) => {
       <div className="max-w-3xl mx-auto px-6 py-8">
         <button onClick={() => navigate('/jobs')} className="flex items-center gap-1 text-sm text-slate-400 hover:text-slate-600 mb-4 transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" />
-          Postes
+          Jobs
         </button>
 
         <div className="flex items-start justify-between gap-4 mb-1">

@@ -11,22 +11,22 @@ interface Props {
   showRemoteMismatchNudge: boolean;
 }
 
-const departmentLabel = (department: string) => (department === 'unknown' ? 'Non précisé' : department);
+const departmentLabel = (department: string) => (department === 'unknown' ? 'Unspecified' : department);
 
 const GeographyCard: React.FC<Props> = ({ geography, configuredLocations, showRemoteMismatchNudge }) => (
-  <InsightCard title="Où sont les bonnes offres" testId="insight-card-geography" fullWidth>
+  <InsightCard title="Where the good jobs are" testId="insight-card-geography" fullWidth>
     {!geography.sufficient ? (
       <p className="text-sm text-slate-400" data-testid="insight-empty-geography">
-        Pas encore assez d'offres Fort pour conclure ({geography.highCount}/{DISCOVERY_THRESHOLDS.MIN_GEO_N}).
+        Not enough high-fit jobs yet to conclude ({geography.highCount}/{DISCOVERY_THRESHOLDS.MIN_GEO_N}).
       </p>
     ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-slate-500">Départements</p>
+            <p className="text-xs font-medium text-slate-500">Departments</p>
             {configuredLocations.length > 0 && (
               <div className="flex items-center gap-1 flex-wrap justify-end">
-                <span className="text-xs text-slate-400">Vos zones :</span>
+                <span className="text-xs text-slate-400">Your areas:</span>
                 {configuredLocations.map((loc) => (
                   <span key={loc} className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
                     {loc}
@@ -50,17 +50,17 @@ const GeographyCard: React.FC<Props> = ({ geography, configuredLocations, showRe
           </div>
         </div>
         <div data-testid="geo-remote-share">
-          <p className="text-xs font-medium text-slate-500 mb-2">Télétravail (d'après le lieu)</p>
+          <p className="text-xs font-medium text-slate-500 mb-2">Remote (based on location)</p>
           <p className="text-3xl font-bold text-slate-800">{formatPercent(geography.remoteShare ?? 0)}</p>
           <p className="text-xs text-slate-400 mt-2">
-            Déduit du champ lieu uniquement — une offre "2 jours de télétravail" annoncée en description n'est pas comptée.
+            Derived from the location field only — a job mentioning "2 days remote" in its description isn't counted.
           </p>
           {showRemoteMismatchNudge && (
             <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-3" data-testid="geo-remote-hint">
-              Les offres Fort sont à {formatPercent(geography.remoteShare ?? 0)} en télétravail, mais "remote" n'est pas dans vos modes de
-              travail.{' '}
+              High-fit jobs are {formatPercent(geography.remoteShare ?? 0)} remote, but "remote" isn't in your work
+              modes.{' '}
               <Link to="/preferences" className="font-medium underline">
-                Ajuster mes préférences
+                Adjust my preferences
               </Link>
             </p>
           )}

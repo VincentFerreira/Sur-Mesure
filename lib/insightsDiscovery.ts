@@ -19,7 +19,7 @@ export interface FitDistribution {
 }
 
 // Never silently drops or averages unqualified candidates as a score of 0 — they get
-// their own explicit bucket so the page can say "217 non évaluées" rather than pretend
+// their own explicit bucket so the page can say "217 not qualified" rather than pretend
 // they don't exist or count them as a failing score.
 export function fitDistribution(candidates: DiscoveryCandidate[]): FitDistribution {
   const dist: FitDistribution = { high: 0, medium: 0, low: 0, unqualified: 0, total: candidates.length };

@@ -197,7 +197,7 @@ const getBestGeminiModel = async (): Promise<string> => {
             if (match) {
                 cachedGeminiModel = GEMINI_MODEL;
                 cachedGeminiOutputLimit = match.outputTokenLimit ?? DEFAULT_GEMINI_OUTPUT_LIMIT;
-                console.log('[Gemini] Modèle :', cachedGeminiModel, '| outputTokenLimit:', cachedGeminiOutputLimit);
+                console.log('[Gemini] Model:', cachedGeminiModel, '| outputTokenLimit:', cachedGeminiOutputLimit);
                 return cachedGeminiModel;
             }
         } catch (err) {
@@ -207,19 +207,19 @@ const getBestGeminiModel = async (): Promise<string> => {
 
     if (lastAuthError) {
         throw new Error(
-            `Clé API Gemini invalide ou rejetée par Google (HTTP ${lastAuthError.status}`
+            `Invalid Gemini API key, or rejected by Google (HTTP ${lastAuthError.status}`
             + (lastAuthError.reason ? ` — ${lastAuthError.reason}` : '')
-            + `). Vérifiez GEMINI_API_KEY dans .env.local (une clé AI Studio valide `
-            + `commence par "AIzaSy"), puis redémarrez le serveur.`
+            + `). Check GEMINI_API_KEY in .env.local (a valid AI Studio key `
+            + `starts with "AIzaSy"), then restart the server.`
         );
     }
     if (lastNetworkError) {
         throw new Error(
-            `Impossible de contacter l'API Gemini pour vérifier le modèle "${GEMINI_MODEL}" `
-            + `(erreur réseau : ${lastNetworkError instanceof Error ? lastNetworkError.message : String(lastNetworkError)}).`
+            `Could not reach the Gemini API to check model "${GEMINI_MODEL}" `
+            + `(network error: ${lastNetworkError instanceof Error ? lastNetworkError.message : String(lastNetworkError)}).`
         );
     }
-    throw new Error(`Le modèle Gemini "${GEMINI_MODEL}" n'est pas disponible avec cette clé API.`);
+    throw new Error(`Gemini model "${GEMINI_MODEL}" isn't available with this API key.`);
 };
 
 // Leaves headroom below the model's hard cap (some of that ceiling can be consumed by

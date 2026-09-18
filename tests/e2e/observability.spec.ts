@@ -29,8 +29,8 @@ test('computing an ATS score logs a fake-provider call visible on the Observabil
   await expect(page.getByTestId('observability-page')).toBeVisible();
   const fakeRow = page.getByTestId('obs-call-row').filter({ hasText: 'Fake' }).first();
   await expect(fakeRow).toBeVisible();
-  await expect(fakeRow).toContainText('Analyse ATS');
-  await expect(fakeRow).toContainText('Succès');
+  await expect(fakeRow).toContainText('ATS analysis');
+  await expect(fakeRow).toContainText('Success');
 
   // Clicking the row expands the lazy-fetched detail panel — full prompt/response
   // text, not just the metadata columns already visible in the table.
@@ -74,7 +74,7 @@ test('the provider filter narrows the calls table', async ({ page, request }) =>
 // row directly via the API — the same lazy-fetch/render path a real run would take.
 test('a search_all call with a step trace shows prompt, response and the step-by-step trace when expanded', async ({ page, request }) => {
   const stepTrace = [
-    { seq: 1, at: new Date().toISOString(), tool: 'WebSearch', input: { query: 'QA Engineer Paris' }, status: 'done', resultSnippet: '2 résultats trouvés' },
+    { seq: 1, at: new Date().toISOString(), tool: 'WebSearch', input: { query: 'QA Engineer Paris' }, status: 'done', resultSnippet: '2 results found' },
     { seq: 2, at: new Date().toISOString(), tool: 'WebFetch', input: { url: 'https://example.test/jobs/1' }, status: 'failed', resultSnippet: 'HTTP 404 Not Found' },
   ];
   await request.post(`${API_URL}/api/observability/calls`, {
@@ -91,7 +91,7 @@ test('a search_all call with a step trace shows prompt, response and the step-by
 
   await page.goto('/observability');
   await expect(page.getByTestId('observability-page')).toBeVisible();
-  const row = page.getByTestId('obs-call-row').filter({ hasText: 'Recherche web' }).first();
+  const row = page.getByTestId('obs-call-row').filter({ hasText: 'Web search' }).first();
   await expect(row).toBeVisible();
   await row.click();
 
@@ -117,7 +117,7 @@ test('an error call shows both the short error message and the full technical er
 
   await page.goto('/observability');
   await expect(page.getByTestId('observability-page')).toBeVisible();
-  const row = page.getByTestId('obs-call-row').filter({ hasText: 'Erreur' }).filter({ hasText: 'Élargissement mots-clés' }).first();
+  const row = page.getByTestId('obs-call-row').filter({ hasText: 'Error' }).filter({ hasText: 'Keyword expansion' }).first();
   await expect(row).toBeVisible();
   await row.click();
 

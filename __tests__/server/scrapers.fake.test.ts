@@ -30,7 +30,7 @@ describe('qualifyAll (fake)', () => {
         expect(result['1'].score).toBeGreaterThanOrEqual(0);
         expect(result['1'].score).toBeLessThanOrEqual(100);
         expect(result['1'].signals.length).toBeGreaterThan(0);
-        expect(result['1'].signals[0]).toEqual({ label: 'Titre aligné', polarity: 'positive' });
+        expect(result['1'].signals[0]).toEqual({ label: 'Title aligned', polarity: 'positive' });
     });
 
     it('rates a genuinely different job family as low fit', async () => {
@@ -124,7 +124,7 @@ describe('qualifyAll (fake)', () => {
                 ['hybrid', 'remote']
             );
             expect(result['1'].fit).toBe('medium');
-            expect(result['1'].signals).toContainEqual({ label: 'Sur site non souhaité', polarity: 'negative' });
+            expect(result['1'].signals).toContainEqual({ label: 'Onsite not wanted', polarity: 'negative' });
         });
 
         it('does not downgrade when the detected work mode is acceptable', async () => {
@@ -143,7 +143,7 @@ describe('qualifyAll (fake)', () => {
                 ['hybrid', 'remote']
             );
             expect(result['1'].fit).toBe('high');
-            expect(result['1'].signals).toContainEqual({ label: 'Mode de travail aligné', polarity: 'positive' });
+            expect(result['1'].signals).toContainEqual({ label: 'Work mode aligned', polarity: 'positive' });
         });
 
         it('does not downgrade when no work mode preference is configured', async () => {
@@ -238,7 +238,7 @@ describe('qualifyAll (fake)', () => {
                 [{ title: 'QA Engineer', company: 'Acme', reason: 'ESN / régie' }]
             );
             expect(result['1'].fit).toBe('medium');
-            expect(result['1'].signals).toContainEqual({ label: 'Comme rejet précédent', polarity: 'negative' });
+            expect(result['1'].signals).toContainEqual({ label: 'Similar to a past rejection', polarity: 'negative' });
         });
 
         it('does not downgrade a candidate from an unrelated company', async () => {

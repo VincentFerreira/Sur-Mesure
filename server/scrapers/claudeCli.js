@@ -176,7 +176,7 @@ function truncate(text, maxLength) {
 // scraperProgress.js as it happens — surfaced live in the UI (see
 // store/scraperStore.ts) instead of a static spinner for what can take minutes.
 function describeToolUse(name, input) {
-    if (name === 'WebSearch') return truncate(`Recherche : ${input?.query ?? ''}`, MAX_PROGRESS_MESSAGE_LENGTH);
+    if (name === 'WebSearch') return truncate(`Searching: ${input?.query ?? ''}`, MAX_PROGRESS_MESSAGE_LENGTH);
     if (name === 'WebFetch') {
         let host = input?.url ?? '';
         try {
@@ -184,7 +184,7 @@ function describeToolUse(name, input) {
         } catch {
             // Not a valid absolute URL — fall back to the raw string above.
         }
-        return truncate(`Vérification : ${host}`, MAX_PROGRESS_MESSAGE_LENGTH);
+        return truncate(`Checking: ${host}`, MAX_PROGRESS_MESSAGE_LENGTH);
     }
     return name;
 }
@@ -211,12 +211,12 @@ const HTTP_STATUS_PATTERN = /HTTP (\d{3})/;
 // what reads as the exact same action twice in a row.
 function describeToolResult(name, input, resultText, failed) {
     if (name === 'WebSearch') {
-        if (failed) return truncate(`Recherche infructueuse : ${input?.query ?? ''}`, MAX_PROGRESS_MESSAGE_LENGTH);
+        if (failed) return truncate(`Search failed: ${input?.query ?? ''}`, MAX_PROGRESS_MESSAGE_LENGTH);
         const resultCount = resultText.match(/"url"\s*:/g)?.length;
         return truncate(
             resultCount !== undefined
-                ? `→ ${resultCount} résultat${resultCount === 1 ? '' : 's'} pour : ${input?.query ?? ''}`
-                : `Recherche terminée : ${input?.query ?? ''}`,
+                ? `→ ${resultCount} result${resultCount === 1 ? '' : 's'} for: ${input?.query ?? ''}`
+                : `Search done: ${input?.query ?? ''}`,
             MAX_PROGRESS_MESSAGE_LENGTH
         );
     }
@@ -229,9 +229,9 @@ function describeToolResult(name, input, resultText, failed) {
         }
         if (failed) {
             const status = resultText.match(HTTP_STATUS_PATTERN)?.[1];
-            return truncate(`Échec${status ? ` (HTTP ${status})` : ''} : ${host}`, MAX_PROGRESS_MESSAGE_LENGTH);
+            return truncate(`Failed${status ? ` (HTTP ${status})` : ''}: ${host}`, MAX_PROGRESS_MESSAGE_LENGTH);
         }
-        return truncate(`Page vérifiée : ${host}`, MAX_PROGRESS_MESSAGE_LENGTH);
+        return truncate(`Page checked: ${host}`, MAX_PROGRESS_MESSAGE_LENGTH);
     }
     return name;
 }
@@ -506,12 +506,12 @@ export async function expandKeywords(jobTitles) {
 // posting's actual requirements are a poor match for the candidate's background.
 const QUALIFY_PROMPT_BASE = `You are screening scraped job postings against what a job seeker actually wants. For each candidate below, give it a fit score from 0 to 100 (100 = perfect match) based on how well it matches the target job titles and, when a list of acceptable locations is given, whether its location is compatible — treat any "Remote"/"Remote France"-style target as satisfied by any remote-friendly posting.
 
-When a list of acceptable work modes (onsite/hybrid/remote) is given, also judge whether the posting's actual work arrangement — inferred from its location and description text — is compatible. Only judge this when the text gives a clear signal (an explicit "on-site only"/"présentiel"/"no remote" statement for onsite, "hybrid"/"hybride"/"X days remote" for hybrid, "full remote"/"100% remote"/"télétravail total" for remote) — never guess from silence. A clearly incompatible work mode (e.g. the posting is on-site only but "onsite" isn't in the acceptable list) counts against the score the same way an incompatible location does, and must produce its own negative signal naming the mismatch (e.g. {"label": "Sur site uniquement", "polarity": "negative"}).
+When a list of acceptable work modes (onsite/hybrid/remote) is given, also judge whether the posting's actual work arrangement — inferred from its location and description text — is compatible. Only judge this when the text gives a clear signal (an explicit "on-site only"/"présentiel"/"no remote" statement for onsite, "hybrid"/"hybride"/"X days remote" for hybrid, "full remote"/"100% remote"/"télétravail total" for remote) — never guess from silence. A clearly incompatible work mode (e.g. the posting is on-site only but "onsite" isn't in the acceptable list) counts against the score the same way an incompatible location does, and must produce its own negative signal naming the mismatch (e.g. {"label": "Onsite only", "polarity": "negative"}).
 - 90-100: clearly the same kind of role, in an acceptable location and work mode (or no such constraint given), with strong signals in the description
 - 45-89: plausibly relevant/adjacent role, or a matching role in a location/work-mode that's a stretch but not clearly wrong, or missing information that would confirm a strong match
 - 0-44: off-topic job family, or a genuinely wrong location or work mode for the role
 
-Also return 2-4 short "signals" per candidate: brief (1-3 word) tags explaining the score, each tagged "positive" (a concrete reason it's a good match — a matched skill/keyword, seniority match, remote/location/work-mode match), "negative" (a concrete concern — missing eval/unclear seniority, undesirable structure like "ESN"/"régie", stale posting, incompatible work mode), or "neutral" (a factual note that's neither, e.g. a city name). Never invent a signal not supported by the posting text given.
+Also return 2-4 short "signals" per candidate: brief (1-3 word) tags explaining the score, each tagged "positive" (a concrete reason it's a good match — a matched skill/keyword, seniority match, remote/location/work-mode match), "negative" (a concrete concern — missing eval/unclear seniority, undesirable structure like a staffing agency/outsourcing shop, stale posting, incompatible work mode), or "neutral" (a factual note that's neither, e.g. a city name). Never invent a signal not supported by the posting text given. Write every signal's "label" in English, even though the posting text itself is in French.
 
 Return ONLY valid JSON, no markdown: {"results": [{"id": string, "score": number, "signals": [{"label": string, "polarity": "positive"|"negative"|"neutral"}]}]} — exactly one entry per candidate id listed, in any order.`;
 
@@ -521,7 +521,7 @@ The job seeker's own CV is provided below. Use it as the primary signal: judge h
 - A high score (90-100) now additionally requires a strong match between the CV and the posting's requirements
 - A mid score (45-89) means a role/location match but only a partial or unclear fit with the CV, or vice versa
 - A low score (0-44) now also covers a posting whose core requirements the CV clearly doesn't meet, even if the title matches
-Include a signal reflecting the CV match specifically (e.g. {"label": "CV aligné", "polarity": "positive"} or {"label": "Écart CV", "polarity": "negative"}).`;
+Include a signal reflecting the CV match specifically (e.g. {"label": "CV aligned", "polarity": "positive"} or {"label": "CV mismatch", "polarity": "negative"}).`;
 
 // Appended (not part of QUALIFY_PROMPT_BASE) so the instruction only ever appears
 // alongside the list it refers to — same reasoning as QUALIFY_PROMPT_WITH_CV_ADDENDUM
@@ -532,7 +532,7 @@ Include a signal reflecting the CV match specifically (e.g. {"label": "CV align�
 function buildRejectionMemorySection(rejectionMemory) {
     if (!rejectionMemory || rejectionMemory.length === 0) return '';
     const lines = rejectionMemory.map((r) => `- ${r.title} @ ${r.company}: ${r.reason}`).join('\n');
-    return `\n\n== PREVIOUSLY REJECTED BY THIS JOB SEEKER (with their own reasons) ==\nUse these as negative examples, not a blocklist of exact titles/companies: if a candidate below shares the same underlying disqualifying pattern (e.g. same kind of structure, same stated dealbreaker), score it low and add a signal naming the match (e.g. {"label": "Comme rejet précédent", "polarity": "negative"}). Do not penalize a candidate that merely shares a job title with one of these if the actual reason given doesn't apply to it.\n${lines}`;
+    return `\n\n== PREVIOUSLY REJECTED BY THIS JOB SEEKER (with their own reasons) ==\nUse these as negative examples, not a blocklist of exact titles/companies: if a candidate below shares the same underlying disqualifying pattern (e.g. same kind of structure, same stated dealbreaker), score it low and add a signal naming the match (e.g. {"label": "Similar to a past rejection", "polarity": "negative"}). Do not penalize a candidate that merely shares a job title with one of these if the actual reason given doesn't apply to it.\n${lines}`;
 }
 
 function buildQualifyPrompt(jobTitles, locations, cvText, workModes, rejectionMemory, batch) {

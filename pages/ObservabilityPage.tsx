@@ -13,12 +13,12 @@ const PROVIDER_LABELS: Record<AiCallProvider, string> = {
 };
 
 const OPERATION_LABELS: Record<string, string> = {
-  parse_cv: 'Parsing CV',
-  analyze_ats: 'Analyse ATS',
-  extract_job: 'Extraction offre',
-  expand_keywords: 'Élargissement mots-clés',
+  parse_cv: 'CV parsing',
+  analyze_ats: 'ATS analysis',
+  extract_job: 'Job extraction',
+  expand_keywords: 'Keyword expansion',
   qualify: 'Qualification',
-  search_all: 'Recherche web',
+  search_all: 'Web search',
 };
 
 function formatDuration(ms: number): string {
@@ -27,7 +27,7 @@ function formatDuration(ms: number): string {
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 function formatCost(usd: number | undefined): string {
@@ -43,28 +43,28 @@ function formatCost(usd: number | undefined): string {
 function formatCallMetadata(metadata: Record<string, unknown> | undefined): string | null {
   if (!metadata) return null;
   const parts: string[] = [];
-  if (typeof metadata.webSearchCount === 'number') parts.push(`${metadata.webSearchCount} recherche${metadata.webSearchCount > 1 ? 's' : ''}`);
+  if (typeof metadata.webSearchCount === 'number') parts.push(`${metadata.webSearchCount} search${metadata.webSearchCount > 1 ? 'es' : ''}`);
   if (typeof metadata.webFetchCount === 'number') {
-    const failures = typeof metadata.webFetchFailures === 'number' && metadata.webFetchFailures > 0 ? ` (${metadata.webFetchFailures} échec${metadata.webFetchFailures > 1 ? 's' : ''})` : '';
+    const failures = typeof metadata.webFetchFailures === 'number' && metadata.webFetchFailures > 0 ? ` (${metadata.webFetchFailures} failure${metadata.webFetchFailures > 1 ? 's' : ''})` : '';
     parts.push(`${metadata.webFetchCount} fetch${metadata.webFetchCount > 1 ? 'es' : ''}${failures}`);
   }
-  if (typeof metadata.numTurns === 'number') parts.push(`${metadata.numTurns} tours`);
+  if (typeof metadata.numTurns === 'number') parts.push(`${metadata.numTurns} turn${metadata.numTurns > 1 ? 's' : ''}`);
   if (metadata.modelUsage && typeof metadata.modelUsage === 'object') {
     const modelCount = Object.keys(metadata.modelUsage as Record<string, unknown>).length;
-    if (modelCount > 1) parts.push(`${modelCount} modèles`);
+    if (modelCount > 1) parts.push(`${modelCount} models`);
   }
   // qualify's batch size (server/scrapers/claudeCli.js's qualifyBatch) — a large scrape
   // run splits into several batched CLI calls, so knowing how many candidates each one
   // covered explains why some qualify rows cost/take more than others.
-  if (typeof metadata.batchSize === 'number') parts.push(`${metadata.batchSize} candidat${metadata.batchSize > 1 ? 's' : ''}`);
+  if (typeof metadata.batchSize === 'number') parts.push(`${metadata.batchSize} candidate${metadata.batchSize > 1 ? 's' : ''}`);
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
 function formatCount(n: number): string {
-  return n.toLocaleString('fr-FR');
+  return n.toLocaleString('en-US');
 }
 
-// Shared shape for the "Détail par provider" / "Détail par opération" breakdown
+// Shared shape for the "Breakdown by provider" / "Breakdown by operation" breakdown
 // tables below — both read straight off AiCallStats.byProvider/byOperation, which the
 // server already aggregates (server/observabilityStore.js's getStats), so this is
 // pure rendering, no client-side computation.
@@ -81,12 +81,12 @@ const BreakdownTable: React.FC<{
       <table className="w-full text-sm" data-testid={testId}>
         <thead className="bg-slate-50 text-slate-500 text-xs">
           <tr>
-            <th className="text-left font-medium px-3 py-2">Nom</th>
-            <th className="text-right font-medium px-3 py-2">Appels</th>
+            <th className="text-left font-medium px-3 py-2">Name</th>
+            <th className="text-right font-medium px-3 py-2">Calls</th>
             <th className="text-right font-medium px-3 py-2">Tokens</th>
-            <th className="text-right font-medium px-3 py-2">Coût</th>
-            <th className="text-right font-medium px-3 py-2">Latence moy.</th>
-            <th className="text-right font-medium px-3 py-2">Erreurs</th>
+            <th className="text-right font-medium px-3 py-2">Cost</th>
+            <th className="text-right font-medium px-3 py-2">Avg latency</th>
+            <th className="text-right font-medium px-3 py-2">Errors</th>
           </tr>
         </thead>
         <tbody>
@@ -158,7 +158,7 @@ const ObservabilityPage: React.FC = () => {
     setDetailLoading(true);
     fetchAiCallDetail(id)
       .then((d) => setDetail(d))
-      .catch(() => setDetailError('Impossible de charger le détail de cet appel.'))
+      .catch(() => setDetailError('Failed to load this call\'s detail.'))
       .finally(() => setDetailLoading(false));
   };
 
@@ -166,43 +166,43 @@ const ObservabilityPage: React.FC = () => {
     <div className="h-full overflow-y-auto" data-testid="observability-page">
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Observabilité</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Appels IA (Gemini, Claude, CLI Claude) — mise à jour automatique toutes les 5s</p>
+          <h1 className="text-xl font-bold text-slate-800">Observability</h1>
+          <p className="text-xs text-slate-400 mt-0.5">AI calls (Gemini, Claude, Claude CLI) — auto-refreshes every 5s</p>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div className="bg-white border border-slate-200 rounded-xl p-3.5" data-testid="obs-stat-calls">
             <p className="text-2xl font-bold text-slate-800">{stats?.totalCalls ?? '—'}</p>
-            <p className="text-xs text-slate-400 mt-0.5">appels</p>
+            <p className="text-xs text-slate-400 mt-0.5">calls</p>
           </div>
           <div className="bg-white border border-slate-200 rounded-xl p-3.5" data-testid="obs-stat-tokens">
-            <p className="text-2xl font-bold text-slate-800">{stats?.totalTokens?.toLocaleString('fr-FR') ?? '—'}</p>
+            <p className="text-2xl font-bold text-slate-800">{stats?.totalTokens?.toLocaleString('en-US') ?? '—'}</p>
             <p className="text-xs text-slate-400 mt-0.5">tokens</p>
           </div>
           <div className="bg-white border border-slate-200 rounded-xl p-3.5" data-testid="obs-stat-cost">
             <p className="text-2xl font-bold text-slate-800">{stats ? formatCost(stats.totalCostUsd) : '—'}</p>
-            <p className="text-xs text-slate-400 mt-0.5">coût total</p>
+            <p className="text-xs text-slate-400 mt-0.5">total cost</p>
           </div>
           <div className="bg-white border border-slate-200 rounded-xl p-3.5" data-testid="obs-stat-duration">
             <p className="text-2xl font-bold text-slate-800">{stats ? formatDuration(stats.avgDurationMs) : '—'}</p>
-            <p className="text-xs text-slate-400 mt-0.5">latence moyenne</p>
+            <p className="text-xs text-slate-400 mt-0.5">avg latency</p>
           </div>
           <div className="bg-white border border-slate-200 rounded-xl p-3.5" data-testid="obs-stat-errors">
             <p className="text-2xl font-bold text-slate-800">{stats ? `${Math.round(stats.errorRate * 100)}%` : '—'}</p>
-            <p className="text-xs text-slate-400 mt-0.5">taux d'erreur</p>
+            <p className="text-xs text-slate-400 mt-0.5">error rate</p>
           </div>
         </div>
 
         {stats && (stats.byOperation && Object.keys(stats.byOperation).length > 0) && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <BreakdownTable
-              title="Détail par opération"
+              title="Breakdown by operation"
               testId="obs-breakdown-operation"
               rows={Object.entries(stats.byOperation)}
               labelFor={(key) => OPERATION_LABELS[key] ?? key}
             />
             <BreakdownTable
-              title="Détail par provider"
+              title="Breakdown by provider"
               testId="obs-breakdown-provider"
               rows={Object.entries(stats.byProvider)}
               labelFor={(key) => PROVIDER_LABELS[key as AiCallProvider] ?? key}
@@ -217,7 +217,7 @@ const ObservabilityPage: React.FC = () => {
             value={providerFilter ?? ''}
             onChange={(e) => setProviderFilter((e.target.value || undefined) as AiCallProvider | undefined)}
           >
-            <option value="">Tous les providers</option>
+            <option value="">All providers</option>
             {(Object.keys(PROVIDER_LABELS) as AiCallProvider[]).map((p) => (
               <option key={p} value={p}>{PROVIDER_LABELS[p]}</option>
             ))}
@@ -228,7 +228,7 @@ const ObservabilityPage: React.FC = () => {
             value={operationFilter ?? ''}
             onChange={(e) => setOperationFilter((e.target.value || undefined) as AiCallOperation | undefined)}
           >
-            <option value="">Toutes les opérations</option>
+            <option value="">All operations</option>
             {Object.entries(OPERATION_LABELS).map(([op, label]) => (
               <option key={op} value={op}>{label}</option>
             ))}
@@ -239,9 +239,9 @@ const ObservabilityPage: React.FC = () => {
             value={statusFilter ?? ''}
             onChange={(e) => setStatusFilter((e.target.value || undefined) as AiCallStatus | undefined)}
           >
-            <option value="">Tous les statuts</option>
-            <option value="success">Succès</option>
-            <option value="error">Erreur</option>
+            <option value="">All statuses</option>
+            <option value="success">Success</option>
+            <option value="error">Error</option>
           </select>
         </div>
 
@@ -253,7 +253,7 @@ const ObservabilityPage: React.FC = () => {
           </div>
         ) : calls.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-xl p-4">
-            <p className="text-sm text-slate-400" data-testid="obs-empty">Aucun appel IA enregistré pour l'instant.</p>
+            <p className="text-sm text-slate-400" data-testid="obs-empty">No AI calls logged yet.</p>
           </div>
         ) : (
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -261,14 +261,14 @@ const ObservabilityPage: React.FC = () => {
               <thead className="bg-slate-50 text-slate-500 text-xs">
                 <tr>
                   <th className="w-6"></th>
-                  <th className="text-left font-medium px-3 py-2">Heure</th>
+                  <th className="text-left font-medium px-3 py-2">Time</th>
                   <th className="text-left font-medium px-3 py-2">Provider</th>
-                  <th className="text-left font-medium px-3 py-2">Opération</th>
-                  <th className="text-left font-medium px-3 py-2">Modèle</th>
-                  <th className="text-right font-medium px-3 py-2">Durée</th>
+                  <th className="text-left font-medium px-3 py-2">Operation</th>
+                  <th className="text-left font-medium px-3 py-2">Model</th>
+                  <th className="text-right font-medium px-3 py-2">Duration</th>
                   <th className="text-right font-medium px-3 py-2">Tokens</th>
-                  <th className="text-right font-medium px-3 py-2">Coût</th>
-                  <th className="text-left font-medium px-3 py-2">Statut</th>
+                  <th className="text-right font-medium px-3 py-2">Cost</th>
+                  <th className="text-left font-medium px-3 py-2">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -295,13 +295,13 @@ const ObservabilityPage: React.FC = () => {
                     </td>
                     <td className="px-3 py-2 text-slate-500">{call.model ?? '—'}</td>
                     <td className="px-3 py-2 text-right text-slate-700">{formatDuration(call.durationMs)}</td>
-                    <td className="px-3 py-2 text-right text-slate-700">{call.totalTokens?.toLocaleString('fr-FR') ?? '—'}</td>
+                    <td className="px-3 py-2 text-right text-slate-700">{call.totalTokens?.toLocaleString('en-US') ?? '—'}</td>
                     <td className="px-3 py-2 text-right text-slate-700">{formatCost(call.costUsd)}</td>
                     <td className="px-3 py-2">
                       {call.status === 'success' ? (
-                        <span className="text-emerald-600 text-xs font-medium">Succès</span>
+                        <span className="text-emerald-600 text-xs font-medium">Success</span>
                       ) : (
-                        <span className="text-red-500 text-xs font-medium">Erreur</span>
+                        <span className="text-red-500 text-xs font-medium">Error</span>
                       )}
                     </td>
                   </tr>

@@ -27,10 +27,10 @@ const FitDistributionCard: React.FC<Props> = ({ distribution, reviews }) => {
   ];
 
   return (
-    <InsightCard title="Qualité des offres trouvées" testId="insight-card-fit">
+    <InsightCard title="Quality of jobs found" testId="insight-card-fit">
       {distribution.total === 0 ? (
         <p className="text-sm text-slate-400" data-testid="insight-empty-fit">
-          Aucune offre découverte pour l'instant.
+          No jobs discovered yet.
         </p>
       ) : (
         <>
@@ -49,12 +49,12 @@ const FitDistributionCard: React.FC<Props> = ({ distribution, reviews }) => {
           </div>
           {distribution.unqualified > 0 && (
             <p className="text-xs text-slate-400 mt-3">
-              {distribution.unqualified} offres non évaluées (découvertes avant la mise en place de la notation).
+              {distribution.unqualified} jobs not qualified (discovered before scoring was introduced).
             </p>
           )}
           {reviews.length > 0 && (
             <div className="mt-4 pt-4 border-t border-slate-100">
-              <p className="text-xs font-medium text-slate-500 mb-2">Taux d'import après revue</p>
+              <p className="text-xs font-medium text-slate-500 mb-2">Import rate after review</p>
               <div className="space-y-1.5">
                 {reviews.map((review) => (
                   <div key={review.tier} className="flex items-center justify-between text-xs" data-testid={`review-conversion-${review.tier}`}>
@@ -62,12 +62,12 @@ const FitDistributionCard: React.FC<Props> = ({ distribution, reviews }) => {
                     <span className="font-medium text-slate-700">
                       {review.importRate !== undefined
                         ? formatPercent(review.importRate)
-                        : `— (${review.reviewedCount}/${DISCOVERY_THRESHOLDS.MIN_REVIEWED} revues)`}
+                        : `— (${review.reviewedCount}/${DISCOVERY_THRESHOLDS.MIN_REVIEWED} reviews)`}
                     </span>
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-slate-400 mt-2">Hors offres écartées automatiquement (fit faible).</p>
+              <p className="text-xs text-slate-400 mt-2">Excludes auto-dismissed jobs (low fit).</p>
             </div>
           )}
         </>

@@ -36,7 +36,7 @@ const CvsPage: React.FC = () => {
     <div className="h-full overflow-y-auto">
       <div className="max-w-5xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-bold text-slate-800">CVthèque</h1>
+          <h1 className="text-xl font-bold text-slate-800">CV Library</h1>
           <Link
             to="/cvs/new"
             className="flex items-center gap-1.5 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors"

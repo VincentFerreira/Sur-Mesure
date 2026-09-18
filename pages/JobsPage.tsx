@@ -73,7 +73,7 @@ const JobsPage: React.FC = () => {
     <div className="h-full overflow-y-auto" data-testid="jobs-page">
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-bold text-slate-800">Postes</h1>
+          <h1 className="text-xl font-bold text-slate-800">Jobs</h1>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setImportOpen(true)}
