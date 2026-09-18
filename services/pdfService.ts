@@ -1,6 +1,7 @@
 /**
  * Service pour compiler du code LaTeX en PDF via le serveur local
  */
+import { API_PORT } from './apiClient';
 
 export interface PhotoData {
     data: string;       // Données base64
@@ -18,7 +19,7 @@ export const compileToPdf = async (latexCode: string, photoData?: PhotoData | nu
         photoData: photoData || null
     };
 
-    const response = await fetch('http://localhost:3001/compile', {
+    const response = await fetch(`http://localhost:${API_PORT}/compile`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

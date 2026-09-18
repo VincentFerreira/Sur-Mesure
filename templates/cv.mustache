@@ -32,6 +32,7 @@
 
 % Commands
 \newcommand{\cvsection}[1]{
+  \needspace{2.5cm}
   \nopagebreak[4]
   \vspace{0.6cm}
   {\color{darkblue}\Large\bfseries\uppercase{#1}} \\[-0.2cm]
@@ -78,7 +79,7 @@
 
 % SKILLS
 \cvsection{[[ tSkills ]]}
-\vspace{0.45cm}
+\vspace{0.15cm}
 \begin{tabularx}{\linewidth}{@{}l X@{}}
   \noalign{\vspace{0.2cm}}
 [[# skills ]]
@@ -88,30 +89,30 @@
 
 % EXPERIENCE
 \cvsection{[[ tExperience ]]}
-\vspace{-0.2cm}
+\vspace{0.15cm}
 [[# experience ]]
 
 \needspace{3.5cm}
 \noindent
-\begin{tabularx}{\linewidth}{@{}p{1.8cm} X@{}}
+\begin{tabularx}{\linewidth}{@{}p{2.4cm} X@{}}
 \textbf{[[ startDate ]]} & \textbf{[[ role ]]} \\
 \emph{[[ endDate ]]} & \emph{[[ company ]] -- [[ location ]]}
 \end{tabularx}%
 \nopagebreak[4]%
-\begin{itemize}[leftmargin=2.22cm, noitemsep, topsep=2pt, parsep=0pt, itemsep=1pt]
+\begin{itemize}[leftmargin=2.82cm, noitemsep, topsep=2pt, parsep=0pt, itemsep=1pt]
 [[# description ]]
     \item [[.]]
 [[/ description ]]
 \end{itemize}%
 \nopagebreak[4]%
-\noindent\hspace{2.22cm}\begin{minipage}[t]{\dimexpr\linewidth-2.22cm\relax}{\footnotesize \color{graytext} [[ tTech ]] [[ techStack ]]}\end{minipage}
+\noindent\hspace{2.82cm}\begin{minipage}[t]{\dimexpr\linewidth-2.82cm\relax}{\footnotesize \color{graytext} [[ tTech ]] [[ techStack ]]}\end{minipage}
 [[# hasSpacing ]]
 \vspace{0.3cm}
 [[/ hasSpacing ]]
 [[/ experience ]]
 % EDUCATION
 \cvsection{[[ tEducation ]]}
-\vspace{0.1cm}
+\vspace{0.15cm}
 \begin{tabularx}{\linewidth}{@{}p{2.4cm} X@{}}
 [[# education ]]
 
@@ -121,21 +122,19 @@
 [[/ education ]]
 \end{tabularx}
 \vspace{-0.5cm}
-\indent
 % CERTIFICATIONS
 \cvsection{[[ tCertifications ]]}
-\vspace{0.1cm}
+\vspace{0.15cm}
 \begin{tabularx}{\linewidth}{@{}p{2.4cm} X@{}}
 [[# certifications ]]
 \textbf{[[ year ]]} & \textbf{[[ title ]]} -- [[ issuer ]] \\[0.2cm]
 [[/ certifications ]]
 \end{tabularx}
 \vspace{-0.5cm}
-\indent
 % LANGUAGES
 \cvsection{[[ tLanguages ]]}
-\vspace{-0.8cm}
-\begin{itemize}[leftmargin=*, noitemsep]
+\vspace{-0.9cm}
+\begin{itemize}[leftmargin=*, noitemsep, topsep=2pt, parsep=0pt, itemsep=1pt]
 [[# languages ]]
   \item [[.]]
 [[/ languages ]]

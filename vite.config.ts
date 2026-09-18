@@ -5,9 +5,16 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
+  // Overridable so e2e (playwright.config.ts) can spawn its own client+API pair on
+  // ports distinct from the normal dev ones — otherwise `npm run test:e2e` can never
+  // run alongside an already-running `npm start`, since Playwright would either
+  // collide on the port or (via reuseExistingServer) silently reuse the dev server,
+  // which has no test hooks and no isolated data dir.
+  const apiPort = process.env.API_PORT || env.API_PORT || '3001';
+  const clientPort = Number(process.env.CLIENT_PORT || env.CLIENT_PORT) || 3000;
   return {
     server: {
-      port: 3000,
+      port: clientPort,
       host: '0.0.0.0',
       // Bind-mounted volumes (e.g. Docker on macOS/Windows) often don't propagate
       // inotify events, so file changes go unnoticed without polling.
@@ -25,7 +32,11 @@ export default defineConfig(({ mode }) => {
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.ANTHROPIC_API_KEY': JSON.stringify(env.ANTHROPIC_API_KEY)
+      'process.env.ANTHROPIC_API_KEY': JSON.stringify(env.ANTHROPIC_API_KEY),
+      // Read by services/apiClient.ts / cvStorageService.ts / pdfService.ts — the
+      // Express API server's port, so the client bundle calls wherever server.js
+      // actually ended up listening instead of a hardcoded 3001.
+      'process.env.API_PORT': JSON.stringify(apiPort),
     },
     resolve: {
       alias: {

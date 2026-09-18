@@ -1,103 +1,221 @@
+// Analyse page — turns data already collected elsewhere in the app (Découverte
+// discoveries, ATS scores, the Postes pipeline) into metrics meant to answer two
+// questions: where should I search, and what should I change on my CV. Each section
+// owns its own empty state rather than a single page-level gate, since the three
+// sections depend on different, independent data (discoveries / scored jobs / jobs
+// with a status history).
+//
+// Deliberately NOT built here (documented so it isn't re-requested later):
+// - CV-vs-CV comparison on the same job: not computable. Job.ats is overwritten in
+//   place on every re-score (one active CV per job, no history) — there's no
+//   Match-style entity keeping prior scores.
+// - Average ATS score per CV: computable, but not shown — selection bias (you assign
+//   your best CV to your best-fit jobs) would make it look meaningful while being
+//   wrong.
+// - Response rate by originating portal: Job.source is free text set at import time,
+//   not a stable portal id — no reliable join back to ScrapedJob.portal today.
+// - A literal "work-mode compatible" percentage: doesn't exist as a field: the
+//   qualification LLM folds it into `score` plus a signal, not a separate boolean.
+// - Auto-dismissed vs. human-dismissed discoveries: both produce status 'dismissed' —
+//   `fit !== 'low'` is used as an imperfect proxy for "was actually reviewed."
+// - Trend lines over time: nothing historizes these aggregates.
 import React, { useEffect, useMemo } from 'react';
-import { BarChart3, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useJobsStore } from '../store/jobsStore';
-
-const BUCKETS: { label: string; min: number; max: number; className: string }[] = [
-  { label: '0–59', min: 0, max: 59, className: 'bg-red-400' },
-  { label: '60–79', min: 60, max: 79, className: 'bg-amber-400' },
-  { label: '80–100', min: 80, max: 100, className: 'bg-emerald-400' },
-];
+import { useCvsStore } from '../store/cvsStore';
+import { useScraperStore } from '../store/scraperStore';
+import { usePreferencesStore } from '../store/preferencesStore';
+import { isJobStale } from '../lib/jobStale';
+import { atsScoreDelta, topMissingKeywords, recurringFormattingIssues } from '../lib/insightsAts';
+import {
+  fitDistribution,
+  reviewConversion,
+  portalYield,
+  geographyBreakdown,
+  shouldNudgeRemoteMismatch,
+} from '../lib/insightsDiscovery';
+import { tallySignalThemes } from '../lib/insightsSignals';
+import { computeFunnel } from '../lib/insightsFunnel';
+import AtsScoreDeltaCard from '../components/insights/AtsScoreDeltaCard';
+import MissingKeywordsCard from '../components/insights/MissingKeywordsCard';
+import FormattingChecksCard from '../components/insights/FormattingChecksCard';
+import FitDistributionCard from '../components/insights/FitDistributionCard';
+import SignalThemesCard from '../components/insights/SignalThemesCard';
+import PortalYieldCard from '../components/insights/PortalYieldCard';
+import GeographyCard from '../components/insights/GeographyCard';
+import FunnelCard from '../components/insights/FunnelCard';
+import StatTile from '../components/insights/StatTile';
 
 const InsightsPage: React.FC = () => {
-  const { jobs, loading, fetchJobs } = useJobsStore();
+  const { jobs, loading: jobsLoading, fetchJobs } = useJobsStore();
+  const { cvs, loading: cvsLoading, fetchCvs } = useCvsStore();
+  const { candidates, loading: candidatesLoading, fetchCandidates } = useScraperStore();
+  const { preferences, fetchPreferences } = usePreferencesStore();
 
   useEffect(() => {
     fetchJobs();
-  }, [fetchJobs]);
+    fetchCvs();
+    fetchCandidates(); // no status filter — need 'dismissed'/'imported' too, not just 'new'
+    fetchPreferences();
+  }, [fetchJobs, fetchCvs, fetchCandidates, fetchPreferences]);
 
-  const scored = useMemo(() => jobs.filter((j) => j.ats), [jobs]);
+  // Section A — Orienter la recherche
+  const distribution = useMemo(() => fitDistribution(candidates), [candidates]);
+  const reviews = useMemo(() => [reviewConversion(candidates, 'high'), reviewConversion(candidates, 'medium')], [candidates]);
+  const negativeSignals = useMemo(() => tallySignalThemes(candidates, 'negative'), [candidates]);
+  const positiveSignals = useMemo(() => tallySignalThemes(candidates, 'positive'), [candidates]);
+  const portals = useMemo(() => portalYield(candidates), [candidates]);
+  const geography = useMemo(() => geographyBreakdown(candidates), [candidates]);
+  const remoteNudge = shouldNudgeRemoteMismatch(geography.remoteShare, preferences?.workModes ?? []);
 
-  const distribution = useMemo(() => {
-    return BUCKETS.map((bucket) => ({
-      ...bucket,
-      count: scored.filter((j) => j.ats!.analysis.overallScore >= bucket.min && j.ats!.analysis.overallScore <= bucket.max).length,
-    }));
-  }, [scored]);
+  // Section B — Adapter le CV
+  const scoredJobs = useMemo(() => jobs.filter((j) => j.ats), [jobs]);
+  const cvsById = useMemo(() => new Map(cvs.map((cv) => [cv.id, cv])), [cvs]);
+  const staleCount = useMemo(
+    () => scoredJobs.filter((j) => isJobStale(j, j.cvId ? cvsById.get(j.cvId) : undefined)).length,
+    [scoredJobs, cvsById]
+  );
+  const scoreDelta = useMemo(() => atsScoreDelta(jobs), [jobs]);
+  const missingKeywords = useMemo(() => topMissingKeywords(jobs), [jobs]);
+  const formattingIssues = useMemo(() => recurringFormattingIssues(jobs), [jobs]);
 
-  const topMissingKeywords = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const job of scored) {
-      const keywords = [...(job.ats!.analysis.criticalKeywords ?? []), ...(job.ats!.analysis.importantKeywords ?? [])];
-      for (const kw of keywords) {
-        if (kw.status !== 'missing') continue;
-        counts.set(kw.keyword, (counts.get(kw.keyword) ?? 0) + 1);
-      }
-    }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-  }, [scored]);
+  // Section C — Pipeline de conversion
+  const funnel = useMemo(() => computeFunnel(jobs), [jobs]);
 
-  const maxCount = Math.max(1, ...distribution.map((b) => b.count));
-
-  if (loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
-      </div>
-    );
-  }
-
-  if (scored.length === 0) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center text-slate-400 max-w-sm">
-          <BarChart3 className="w-8 h-8 mx-auto mb-3 text-slate-300" />
-          <p className="text-slate-500 font-medium">No scores yet.</p>
-          <p className="text-sm">Compute a score on a job to see analytics here.</p>
-        </div>
-      </div>
-    );
-  }
+  const loading =
+    (jobsLoading && jobs.length === 0) || (cvsLoading && cvs.length === 0) || (candidatesLoading && candidates.length === 0);
+  const appliedCount = funnel.stages.find((s) => s.stage === 'applied')?.reachedCount ?? 0;
 
   return (
     <div className="h-full overflow-y-auto" data-testid="insights-page">
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
         <h1 className="text-xl font-bold text-slate-800">Analyse</h1>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">
-            Score distribution ({scored.length} scored job{scored.length > 1 ? 's' : ''})
-          </p>
-          <div className="space-y-2.5">
-            {distribution.map((bucket) => (
-              <div key={bucket.label} className="flex items-center gap-3" data-testid={`distribution-${bucket.label}`}>
-                <span className="text-xs text-slate-500 w-14 shrink-0">{bucket.label}</span>
-                <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${bucket.className} transition-all`}
-                    style={{ width: `${(bucket.count / maxCount) * 100}%` }}
-                  />
-                </div>
-                <span className="text-xs font-semibold text-slate-600 w-6 text-right shrink-0">{bucket.count}</span>
-              </div>
-            ))}
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatTile
+            testId="insight-stat-discovered"
+            value={jobsLoading || candidatesLoading ? '—' : distribution.total}
+            label="offres découvertes"
+            to="/job-search"
+          />
+          <StatTile
+            testId="insight-stat-high-fit"
+            value={candidatesLoading ? '—' : distribution.high}
+            label="offres Fort"
+            to="/job-search"
+          />
+          <StatTile
+            testId="insight-stat-ats-avg"
+            value={jobsLoading ? '—' : (scoreDelta.avgOverall ?? '—')}
+            label={`score ATS moyen (${scoreDelta.scoredCount} poste${scoreDelta.scoredCount > 1 ? 's' : ''})`}
+            to="/jobs"
+          />
+          <StatTile testId="insight-stat-applied" value={jobsLoading ? '—' : appliedCount} label="candidatures envoyées" to="/jobs" />
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">Top missing keywords</p>
-          {topMissingKeywords.length === 0 ? (
-            <p className="text-sm text-slate-400">No missing keywords across your scored jobs — nicely done.</p>
-          ) : (
-            <ul className="space-y-2">
-              {topMissingKeywords.map(([keyword, count]) => (
-                <li key={keyword} className="flex items-center justify-between text-sm" data-testid={`missing-keyword-${keyword}`}>
-                  <span className="text-slate-700 font-medium">{keyword}</span>
-                  <span className="text-xs text-slate-400">missing in {count} job{count > 1 ? 's' : ''}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        {loading && (
+          <div className="flex justify-center py-16">
+            <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+          </div>
+        )}
+
+        {!loading && (
+          <section data-testid="insights-section-search" className="space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-600">Orienter la recherche</h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {distribution.total} offre{distribution.total > 1 ? 's' : ''} découverte{distribution.total > 1 ? 's' : ''} ·{' '}
+                {distribution.total - distribution.unqualified} évaluée{distribution.total - distribution.unqualified > 1 ? 's' : ''} ·{' '}
+                {distribution.unqualified} non évaluée{distribution.unqualified > 1 ? 's' : ''}
+              </p>
+            </div>
+            {distribution.total === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-4">
+                <p className="text-sm text-slate-400" data-testid="insight-empty-search">
+                  Aucune offre découverte pour l'instant.{' '}
+                  <Link to="/job-search" className="text-indigo-600 hover:text-indigo-800 font-medium">
+                    Lancer une recherche
+                  </Link>
+                </p>
+              </div>
+            ) : distribution.total - distribution.unqualified === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-4">
+                <p className="text-sm text-slate-400">
+                  Aucune offre évaluée.{' '}
+                  <Link to="/job-search" className="text-indigo-600 hover:text-indigo-800 font-medium">
+                    Relancez une recherche
+                  </Link>{' '}
+                  pour que les nouvelles offres soient notées.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FitDistributionCard distribution={distribution} reviews={reviews} />
+                <PortalYieldCard result={portals} />
+                <SignalThemesCard
+                  title="Freins récurrents du marché"
+                  testId="insight-card-signals-negative"
+                  emptyTestId="insight-empty-signals-negative"
+                  polarity="negative"
+                  result={negativeSignals}
+                  barClassName="bg-amber-400"
+                />
+                <SignalThemesCard
+                  title="Atouts récurrents"
+                  testId="insight-card-signals-positive"
+                  emptyTestId="insight-empty-signals-positive"
+                  polarity="positive"
+                  result={positiveSignals}
+                  barClassName="bg-emerald-400"
+                />
+                <GeographyCard
+                  geography={geography}
+                  configuredLocations={preferences?.locations ?? []}
+                  showRemoteMismatchNudge={remoteNudge}
+                />
+              </div>
+            )}
+          </section>
+        )}
+
+        {!loading && (
+          <section data-testid="insights-section-cv" className="space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-600">Adapter le CV</h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {scoredJobs.length} poste{scoredJobs.length > 1 ? 's' : ''} scoré{scoredJobs.length > 1 ? 's' : ''}
+                {staleCount > 0 && ` · ${staleCount} score${staleCount > 1 ? 's' : ''} obsolète${staleCount > 1 ? 's' : ''} (CV modifié depuis)`}
+              </p>
+            </div>
+            {scoredJobs.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-4">
+                <p className="text-sm text-slate-400" data-testid="insight-empty-cv">
+                  Aucun poste scoré.{' '}
+                  <Link to="/jobs" className="text-indigo-600 hover:text-indigo-800 font-medium">
+                    Calculez un score ATS
+                  </Link>{' '}
+                  sur un poste pour voir quoi ajuster dans votre CV.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <AtsScoreDeltaCard delta={scoreDelta} />
+                <FormattingChecksCard rows={formattingIssues} />
+                <MissingKeywordsCard rows={missingKeywords} />
+              </div>
+            )}
+          </section>
+        )}
+
+        {!loading && (
+          <section data-testid="insights-section-pipeline" className="space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-600">Pipeline de conversion</h2>
+            </div>
+            <FunnelCard funnel={funnel} />
+          </section>
+        )}
       </div>
     </div>
   );

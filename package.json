@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "dev": "vite",
     "server": "node --watch server.js",
@@ -19,6 +22,7 @@
     "@anthropic-ai/sdk": "^0.95.2",
     "@google/genai": "^1.40.0",
     "cors": "^2.8.6",
+    "date-fns": "^4.4.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
     "lucide-react": "^1.16.0",
@@ -41,6 +45,7 @@
     "concurrently": "^9.2.4",
     "jsdom": "^27.0.1",
     "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "5.4.296",
     "supertest": "^7.2.2",
     "typescript": "~6.0.3",
     "vite": "^8.0.13",

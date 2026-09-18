@@ -151,10 +151,10 @@ export const generateLatex = (data: CVData, template?: string, fontId?: string):
 };
 
 // Export pour le serveur: retourne le LaTeX + les données de photo si disponible
-export const generateLatexWithPhoto = (data: CVData): { latex: string; photoData: { data: string; extension: string } | null } => {
+export const generateLatexWithPhoto = (data: CVData, fontId?: string): { latex: string; photoData: { data: string; extension: string } | null } => {
   const photoData = extractBase64Data(data.personalInfo.photo);
   return {
-    latex: generateLatex(data),
+    latex: generateLatex(data, undefined, fontId),
     photoData
   };
 };

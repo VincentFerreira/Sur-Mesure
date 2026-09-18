@@ -1,0 +1,115 @@
+{
+  "currentLanguage": "en",
+  "personalInfo": {
+    "firstName": "Marco",
+    "lastName": "Ferreira",
+    "title": {
+      "fr": "Ingénieur Logiciel Principal",
+      "en": "Principal Software Engineer"
+    },
+    "email": "marco.ferreira@example.com",
+    "medium": "medium.com/@marcof",
+    "location": "Lisbon, Portugal",
+    "linkedin": "linkedin.com/in/marcoferreira",
+    "github": "github.com/marcoferreira",
+    "photo": null,
+    "summary": {
+      "fr": "Ingénieur logiciel avec quinze ans d'expérience dans la conception de plateformes backend à forte disponibilité.",
+      "en": "Software engineer with fifteen years of experience designing highly available backend platforms."
+    }
+  },
+  "skills": [
+    {
+      "id": "skill-1",
+      "name": { "fr": "Programmation", "en": "Programming" },
+      "items": { "fr": "Java, TypeScript, Python, Go", "en": "Java, TypeScript, Python, Go" }
+    },
+    {
+      "id": "skill-2",
+      "name": { "fr": "Infrastructure", "en": "Infrastructure" },
+      "items": { "fr": "AWS, Docker, Kubernetes, Jenkins", "en": "AWS, Docker, Kubernetes, Jenkins" }
+    },
+    {
+      "id": "skill-3",
+      "name": { "fr": "Tests", "en": "Testing" },
+      "items": { "fr": "JUnit, Gatling, tests de performance", "en": "JUnit, Gatling, performance testing" }
+    }
+  ],
+  "experience": [
+    {
+      "id": "exp-1",
+      "role": { "fr": "Ingénieur Logiciel Principal", "en": "Principal Software Engineer" },
+      "company": "Helios Cloud Systems",
+      "location": "Lisbon, Portugal",
+      "startDate": { "fr": "Mars 2020", "en": "March 2020" },
+      "endDate": { "fr": "Aujourd'hui", "en": "Present" },
+      "description": {
+        "fr": ["Conception de l'architecture de facturation multi-tenant", "Encadrement d'une équipe de six ingénieurs", "Mise en place de l'observabilité sur l'ensemble de la plateforme"],
+        "en": ["Designed the multi-tenant billing architecture", "Mentored a team of six engineers", "Rolled out platform-wide observability"]
+      },
+      "techStack": "TypeScript, PostgreSQL, Kubernetes, Terraform"
+    },
+    {
+      "id": "exp-2",
+      "role": { "fr": "Ingénieur Logiciel Senior", "en": "Senior Software Engineer" },
+      "company": "Nimbus Cloud SAS",
+      "location": "Paris, France",
+      "startDate": { "fr": "Janvier 2017", "en": "January 2017" },
+      "endDate": { "fr": "Février 2020", "en": "February 2020" },
+      "description": {
+        "fr": ["Migration de l'API monolithique vers une architecture de microservices", "Réduction de 40% du temps de réponse moyen de l'API", "Automatisation du pipeline de déploiement continu"],
+        "en": ["Migrated the monolithic API to a microservices architecture", "Reduced average API response time by 40%", "Automated the continuous deployment pipeline"]
+      },
+      "techStack": "Java, Spring Boot, Redis, Jenkins"
+    },
+    {
+      "id": "exp-3",
+      "role": { "fr": "Ingénieur Logiciel", "en": "Software Engineer" },
+      "company": "Orange Business Services",
+      "location": "Nantes, France",
+      "startDate": { "fr": "Septembre 2011", "en": "September 2011" },
+      "endDate": { "fr": "Septembre 2014", "en": "September 2014" },
+      "description": {
+        "fr": ["Conception et développement d'applications de gestion web multi-postes", "Architecture d'un moteur de génération de contenu collaboratif multi-device"],
+        "en": ["Designed and developed multiple web-based management applications", "Architected a collaborative content generation engine for a multi-device application"]
+      },
+      "techStack": "Adobe LiveCycle, Spring, Alfresco, Java, JavaScript"
+    },
+    {
+      "id": "exp-4",
+      "role": { "fr": "Développeur Logiciel", "en": "Software Developer" },
+      "company": "Nuxeo",
+      "location": "Nantes, France",
+      "startDate": { "fr": "Juin 2008", "en": "June 2008" },
+      "endDate": { "fr": "Août 2011", "en": "August 2011" },
+      "description": {
+        "fr": ["Contribution aux initiatives R&D et à l'innovation produit", "Déploiement d'infrastructure avec AWS et Docker", "Mise en place de pipelines CI/CD avec JUnit, Jenkins, Maven et Git"],
+        "en": ["Contributed to R&D initiatives and product innovation", "Deployed infrastructure using Amazon Web Services (AWS) and Docker", "Implemented CI/CD pipelines and test automation using JUnit, Jenkins, Maven, and Git"]
+      },
+      "techStack": "Nuxeo Studio, XHTML, CSS, JavaScript, Java, Amazon Web Services, Docker, Junit, Jenkins, Maven, Git, Redmine"
+    }
+  ],
+  "education": [
+    {
+      "id": "edu-1",
+      "school": "Nantes Université",
+      "degree": { "fr": "Master Architecture Logicielle et Génie Logiciel", "en": "Master's Degree in Software Architecture and Software Engineering" },
+      "location": "Nantes, France",
+      "startDate": "2006",
+      "endDate": "2008",
+      "description": { "fr": "Spécialisation en architecture de systèmes distribués", "en": "Specialization in distributed systems architecture" }
+    }
+  ],
+  "certifications": [
+    {
+      "id": "cert-1",
+      "title": { "fr": "ISTQB Certified Tester Foundation Level", "en": "ISTQB Certified Tester Foundation Level" },
+      "issuer": "GASQ",
+      "year": "2023"
+    }
+  ],
+  "languages": {
+    "fr": ["Français (Langue maternelle)", "Anglais (Courant)", "Portugais (Élémentaire)", "Espagnol (Élémentaire)"],
+    "en": ["French (Native)", "English (Fluent)", "Portuguese (Elementary)", "Spanish (Elementary)"]
+  }
+}
