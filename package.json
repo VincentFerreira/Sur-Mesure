@@ -47,7 +47,7 @@
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "5.4.296",
     "supertest": "^7.2.2",
-    "typescript": "~6.0.3",
+    "typescript": "~7.0.2",
     "vite": "^8.0.13",
     "vitest": "^3.2.4"
   }
