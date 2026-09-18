@@ -1,10 +1,14 @@
-# 🚀 YARB — Yet Another Resume Builder
-### *An AI job-search copilot: it finds, qualifies, and scores job postings for you — then helps you land them.*
+# 📏 Sur-Mesure
+### *AI Job Search Tool. One CV per Job. Measured, then tailored.*
 
 [![CI](https://github.com/VincentFerreira/YARB-Resume-Builder/actions/workflows/ci.yml/badge.svg)](https://github.com/VincentFerreira/YARB-Resume-Builder/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/VincentFerreira/YARB-Resume-Builder/graph/badge.svg)](https://codecov.io/gh/VincentFerreira/YARB-Resume-Builder)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js ≥ 23](https://img.shields.io/badge/node-%E2%89%A523-brightgreen)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
+[![Built with Claude Code](https://img.shields.io/badge/Built_with-Claude_Code-D97757)](https://claude.com/claude-code)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
 A web app that scrapes job postings from multiple sources, qualifies and scores each one against your actual CV, and tracks your search through a kanban pipeline — with ATS scoring, CV editing, and PDF export built in.
 
@@ -12,7 +16,7 @@ A web app that scrapes job postings from multiple sources, qualifies and scores 
 
 1. **Import your CV** — drop an existing PDF and let AI extract the details, or build one from scratch in the visual editor.
 2. **Set your search preferences** — job titles, locations, work mode, which sources to use, and a budget.
-3. **Launch the search** — YARB discovers postings across several sources, qualifies and scores each one against your CV, and hands you a ranked list to review.
+3. **Launch the search** — Sur-Mesure discovers postings across several sources, qualifies and scores each one against your CV, and hands you a ranked list to review.
 
 ## Features
 
@@ -21,18 +25,18 @@ A web app that scrapes job postings from multiple sources, qualifies and scores 
 - **AI web search** — a fourth source fans out through Claude Code's own WebSearch/WebFetch tools for boards with no public API. There's no fixed site list: it searches and verifies postings the way a person would, favoring sources it can actually fetch (company career pages, Greenhouse, Lever, France Travail's own site)
 - **Per-source control** — enable or disable each source independently from Preferences, with a short explanation of what each one does
 
+### 📋 Kanban pipeline
+- **8-stage pipeline** — Lead → To apply → Applied → Screening → Interview → Offer / Rejected / Archived
+- **Table & kanban views** — browse as a filterable table or drag cards across status columns; your view choice is remembered
+- **Priorities & follow-ups** — set a priority level and a next-action date per job
+- **Staleness detection** — a job's ATS score is flagged out of date the moment its linked CV changes
+
 ### 🎯 Auto-qualification & scoring
 - **Fit score & tier** — every discovered posting gets a 0-100 fit score and a high/medium/low tier, both computed automatically
 - **Auto-labeled signals** — short tags explaining the score (e.g. "CV aligned," "Onsite only," "Staffing agency"), positive/negative/neutral
 - **CV-aware** — when a CV is linked in preferences, qualification judges your actual skills and experience against the posting's stated requirements, not just title and location
 - **Learns from your dismissals** — a reason you give when dismissing a posting downgrades similar future postings from that company
 - **Configurable** — a budget cap on AI search spend and an auto-dismiss score threshold, both tunable in Preferences
-
-### 📋 Kanban pipeline
-- **8-stage pipeline** — Lead → To apply → Applied → Screening → Interview → Offer / Rejected / Archived
-- **Table & kanban views** — browse as a filterable table or drag cards across status columns; your view choice is remembered
-- **Priorities & follow-ups** — set a priority level and a next-action date per job
-- **Staleness detection** — a job's ATS score is flagged out of date the moment its linked CV changes
 
 ### 📊 Insights dashboard
 - Fit distribution and review-conversion rate across your discoveries

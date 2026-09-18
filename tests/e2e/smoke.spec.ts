@@ -28,7 +28,7 @@ test('smoke: API is healthy and the app renders on its core pages without a clie
   // wouldn't have caught a bug isolated to, say, the Preferences or Observability page.
   await page.goto('/');
   await expect(page).toHaveURL(/\/jobs$/);
-  await expect(page.getByText('YARB')).toBeVisible();
+  await expect(page.getByText('Sur-Mesure')).toBeVisible();
   await expect(page.getByTestId('jobs-page')).toBeVisible();
 
   await page.goto('/preferences');

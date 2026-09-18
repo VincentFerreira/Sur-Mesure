@@ -27,8 +27,8 @@ const AppShell: React.FC = () => {
       <nav className="w-52 shrink-0 bg-white border-r border-slate-200 flex flex-col">
         <div className="px-4 py-4 border-b border-slate-100">
           <span className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <span className="bg-indigo-600 text-white px-1.5 py-0.5 rounded-md text-sm">CV</span>
-            YARB
+            <span className="text-base">📏</span>
+            Sur-Mesure
           </span>
         </div>
         <div className="flex-1 py-3 flex flex-col gap-1 px-2">

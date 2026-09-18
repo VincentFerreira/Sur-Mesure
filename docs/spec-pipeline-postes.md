@@ -1,13 +1,13 @@
-# YARB — Spec : CVthèque, postes et scores ATS
+# Sur-Mesure — Spec : CVthèque, postes et scores ATS
 
 > Document de cadrage à donner à Claude Code en *plan mode*.
-> Périmètre : passer YARB d'un éditeur de CV mono-document à un **poste de pilotage de recherche d'emploi** : plusieurs CV, plusieurs postes, et le score ATS de chaque couple (CV × poste).
+> Périmètre : passer Sur-Mesure d'un éditeur de CV mono-document à un **poste de pilotage de recherche d'emploi** : plusieurs CV, plusieurs postes, et le score ATS de chaque couple (CV × poste).
 
 ---
 
 ## 1. Objectif
 
-Aujourd'hui YARB répond à « je fabrique **un** CV ». La cible répond à trois questions supplémentaires :
+Aujourd'hui Sur-Mesure répond à « je fabrique **un** CV ». La cible répond à trois questions supplémentaires :
 
 1. **Où j'en suis ?** — statut de chaque poste, dernière activité, relance à faire.
 2. **Quel CV pour quel poste ?** — quel CV a été envoyé, et est-ce le meilleur que j'avais ?
@@ -375,7 +375,7 @@ Chaque lot est mergeable seul et laisse l'app fonctionnelle.
 ```
 Lis @docs/spec-pipeline-postes.md en entier avant toute chose.
 
-Contexte : YARB est un CV builder React 19 + TS + Vite + Tailwind avec un serveur
+Contexte : Sur-Mesure est un CV builder React 19 + TS + Vite + Tailwind avec un serveur
 Express qui compile du LaTeX. Je veux y ajouter la gestion de postes et de scores
 ATS par couple CV × poste, décrite dans cette spec.
 

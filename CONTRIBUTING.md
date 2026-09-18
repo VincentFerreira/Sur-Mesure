@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for your interest in YARB !
+Thank you for your interest in Sur-Mesure!
 
 ## Prerequisites
 
