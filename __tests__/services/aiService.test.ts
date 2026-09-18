@@ -17,10 +17,13 @@ const mockAnthropicCreate = vi.hoisted(() => vi.fn());
 const mockLogAiCall = vi.hoisted(() => vi.fn());
 
 // Mock SDKs before importing aiService (vi.mock is hoisted automatically)
+// Vitest 4: mocks invoked with `new` now really construct, and arrow functions
+// can't be constructors (no [[Construct]]) — these factories must be `function`,
+// not `() =>`, since aiService.ts does `new GoogleGenAI(...)` / `new Anthropic(...)`.
 vi.mock('@google/genai', () => ({
-  GoogleGenAI: vi.fn(() => ({
-    models: { generateContent: mockGeminiGenerateContent },
-  })),
+  GoogleGenAI: vi.fn(function () {
+    return { models: { generateContent: mockGeminiGenerateContent } };
+  }),
   Type: {
     OBJECT: 'OBJECT',
     ARRAY: 'ARRAY',
@@ -30,9 +33,9 @@ vi.mock('@google/genai', () => ({
 }));
 
 vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn(() => ({
-    messages: { create: mockAnthropicCreate },
-  })),
+  default: vi.fn(function () {
+    return { messages: { create: mockAnthropicCreate } };
+  }),
 }));
 
 // Spied rather than left real: these tests assert exactly which/how many rows get

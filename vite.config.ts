@@ -45,7 +45,11 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: 'node',
-      exclude: ['**/node_modules/**', 'tests/e2e/**'],
+      // vitest 4 switched to tinyglobby, which (unlike vitest 3's globber) descends
+      // into dot-directories by default — so a locally checked-out git worktree under
+      // `.claude/worktrees/**` (gitignored, CI never has one) now gets its own nested
+      // `tests/e2e/**` picked up as unit tests unless excluded explicitly here too.
+      exclude: ['**/node_modules/**', 'tests/e2e/**', '.claude/**'],
       setupFiles: ['./tests/setup/serverTestData.ts'],
       coverage: {
         provider: 'v8',
