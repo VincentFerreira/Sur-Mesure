@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateLatex, generateLatexWithPhoto } from '../../services/latexService';
+import { getFontById, DEFAULT_FONT_ID } from '../../lib/fonts';
 import type { CVData } from '../../types';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -373,5 +374,34 @@ describe('generateLatexWithPhoto', () => {
   it('latex output is identical to generateLatex output', () => {
     const cv = makeCV();
     expect(generateLatexWithPhoto(cv).latex).toBe(generateLatex(cv));
+  });
+});
+
+// ── Font selection ────────────────────────────────────────────────────────────
+
+describe('generateLatex — font selection', () => {
+  it('uses the default font package when no fontId is passed', () => {
+    const cv = makeCV();
+    const latex = generateLatex(cv);
+    expect(latex).toContain(getFontById(DEFAULT_FONT_ID).latexPackage);
+  });
+
+  it('uses the given font\'s package when a fontId is passed', () => {
+    const cv = makeCV();
+    const latex = generateLatex(cv, undefined, 'charter');
+    expect(latex).toContain(getFontById('charter').latexPackage);
+    expect(latex).not.toContain(getFontById(DEFAULT_FONT_ID).latexPackage);
+  });
+
+  it('falls back to the default font for an unknown fontId', () => {
+    const cv = makeCV();
+    const latex = generateLatex(cv, undefined, 'not-a-real-font');
+    expect(latex).toContain(getFontById(DEFAULT_FONT_ID).latexPackage);
+  });
+
+  it('threads fontId through generateLatexWithPhoto', () => {
+    const cv = makeCV();
+    const { latex } = generateLatexWithPhoto(cv, 'times');
+    expect(latex).toContain(getFontById('times').latexPackage);
   });
 });

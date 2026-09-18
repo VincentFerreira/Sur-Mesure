@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
+import { E2E_CLIENT_PORT, E2E_API_PORT } from './tests/helpers/apiUrl';
 
 // Isolated data dir for the server this config spawns itself — keeps e2e runs from
 // reading/writing the developer's real CVs and jobs under ./data (also sidesteps that
@@ -17,7 +18,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: `http://localhost:${E2E_CLIENT_PORT}`,
     trace: 'on-first-retry',
   },
   projects: [
@@ -26,10 +27,16 @@ export default defineConfig({
   webServer: [
     {
       command: 'npm run dev',
-      url: 'http://localhost:3000',
+      url: `http://localhost:${E2E_CLIENT_PORT}`,
+      // Ports dedicated to e2e (see tests/helpers/apiUrl.ts) mean `reuseExistingServer`
+      // now only ever reuses a previous e2e run's own leftover server, never a
+      // developer's normally-running `npm start` on the default 3000/3001 — so e2e can
+      // run without stopping it.
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
       env: {
+        CLIENT_PORT: String(E2E_CLIENT_PORT),
+        API_PORT: String(E2E_API_PORT),
         // Exposes the deterministic, offline "Fake" ATS provider in the UI so scoring
         // e2e scenarios never depend on a real LLM call. Only applies when this config
         // spawns its own Vite dev server (see YARB_TEST_HOOKS note below).
@@ -38,10 +45,11 @@ export default defineConfig({
     },
     {
       command: 'npm run server',
-      url: 'http://localhost:3001/health',
+      url: `http://localhost:${E2E_API_PORT}/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
       env: {
+        API_PORT: String(E2E_API_PORT),
         // server.js defaults to a macOS MacTeX path; point it at the
         // Linux pdflatex binary for local dev and CI alike.
         PDFLATEX_PATH: process.env.PDFLATEX_PATH ?? '/usr/bin/pdflatex',
@@ -50,6 +58,10 @@ export default defineConfig({
         // reused instance, so it can't expose the reset/seed hooks on a live deployment.
         YARB_TEST_HOOKS: '1',
         YARB_DATA_DIR: E2E_DATA_DIR,
+        // Registers the deterministic, offline `fake` portal in the scraper registry
+        // (server/scrapers/index.js) so job-search e2e scenarios never depend on
+        // France Travail credentials or network access.
+        SCRAPER_PROVIDER: 'fake',
       },
     },
   ],

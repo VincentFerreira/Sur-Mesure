@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CVData } from '../types';
 import { generateLatexWithPhoto } from '../services/latexService';
 import { compileToPdf } from '../services/pdfService';
+import { useTemplateSettingsStore } from '../store/templateSettingsStore';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface PdfViewerProps {
@@ -9,11 +10,13 @@ interface PdfViewerProps {
 }
 
 const PdfViewer: React.FC<PdfViewerProps> = ({ data }) => {
+  const { fontId } = useTemplateSettingsStore();
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isStale, setIsStale] = useState(false);
   const lastCompiledJson = useRef<string>('');
+  const lastCompiledFontId = useRef<string>('');
   const prevUrlRef = useRef<string | null>(null);
 
   const compile = useCallback(async () => {
@@ -22,7 +25,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ data }) => {
     setIsStale(false);
     const snapshot = JSON.stringify(data);
     try {
-      const { latex, photoData } = generateLatexWithPhoto(data);
+      const { latex, photoData } = generateLatexWithPhoto(data, fontId);
       const blob = await compileToPdf(latex, photoData);
       if (prevUrlRef.current) {
         URL.revokeObjectURL(prevUrlRef.current);
@@ -31,12 +34,13 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ data }) => {
       prevUrlRef.current = url;
       setPdfUrl(url);
       lastCompiledJson.current = snapshot;
+      lastCompiledFontId.current = fontId;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Compilation error');
     } finally {
       setIsLoading(false);
     }
-  }, [data]);
+  }, [data, fontId]);
 
   // Auto-compile on first mount
   useEffect(() => {
@@ -47,12 +51,15 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ data }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Detect stale state when data changes after first compile
+  // Detect stale state when data or the selected font changes after first compile
   useEffect(() => {
-    if (lastCompiledJson.current && JSON.stringify(data) !== lastCompiledJson.current) {
+    if (
+      lastCompiledJson.current &&
+      (JSON.stringify(data) !== lastCompiledJson.current || fontId !== lastCompiledFontId.current)
+    ) {
       setIsStale(true);
     }
-  }, [data]);
+  }, [data, fontId]);
 
   return (
     <div className="w-full h-full flex flex-col gap-2">

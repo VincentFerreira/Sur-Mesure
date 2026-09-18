@@ -3,6 +3,8 @@ import { CVData } from '../types';
 import { generateLatex, generateLatexWithPhoto, getTemplate } from '../services/latexService';
 import { saveLatexTemplate, resetLatexTemplate, loadLatexTemplate } from '../services/templateStorageService';
 import { compileToPdf, PhotoData } from '../services/pdfService';
+import { useTemplateSettingsStore } from '../store/templateSettingsStore';
+import FontSelector from './FontSelector';
 import { Copy, Check, RefreshCw, RotateCcw, Loader2, AlertCircle, Save, FileCode2 } from 'lucide-react';
 
 interface LatexViewerProps {
@@ -14,8 +16,9 @@ type ViewMode = 'generated' | 'template';
 const DEBOUNCE_MS = 1500;
 
 const LatexViewer: React.FC<LatexViewerProps> = ({ data }) => {
+  const { fontId, error: fontError, setFont } = useTemplateSettingsStore();
   const [viewMode, setViewMode] = useState<ViewMode>('generated');
-  const [{ latex: initLatex, photoData: initPhoto }] = useState(() => generateLatexWithPhoto(data));
+  const [{ latex: initLatex, photoData: initPhoto }] = useState(() => generateLatexWithPhoto(data, fontId));
   const [latexCode, setLatexCode] = useState(initLatex);
   const [photoData, setPhotoData] = useState<PhotoData | null>(initPhoto ?? null);
   const [isModified, setIsModified] = useState(false);
@@ -57,13 +60,13 @@ const LatexViewer: React.FC<LatexViewerProps> = ({ data }) => {
     return () => { if (prevUrlRef.current) URL.revokeObjectURL(prevUrlRef.current); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync from form data changes when not manually modified
+  // Sync from form data or font changes when not manually modified
   useEffect(() => {
-    const { latex, photoData: pd } = generateLatexWithPhoto(data);
+    const { latex, photoData: pd } = generateLatexWithPhoto(data, fontId);
     autoLatexRef.current = latex;
     setPhotoData(pd ?? null);
     if (!isModified) setLatexCode(latex);
-  }, [data, isModified]);
+  }, [data, fontId, isModified]);
 
   // Debounced compile on every code/photo change (skip first render — handled above)
   useEffect(() => {
@@ -197,6 +200,11 @@ const LatexViewer: React.FC<LatexViewerProps> = ({ data }) => {
                   Compiling…
                 </span>
               )}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-xs text-slate-400">Police :</span>
+                <FontSelector value={fontId} onChange={setFont} />
+              </div>
+              {fontError && <span className="text-xs text-red-400 shrink-0">{fontError}</span>}
               {hasCustomTemplate && (
                 <button
                   onClick={handleResetTemplate}
@@ -215,7 +223,7 @@ const LatexViewer: React.FC<LatexViewerProps> = ({ data }) => {
                 {templateSaved ? 'Sauvegardé !' : 'Sauvegarder'}
               </button>
               <button
-                onClick={() => compile(generateLatex(data, templateCode), photoData)}
+                onClick={() => compile(generateLatex(data, templateCode, fontId), photoData)}
                 disabled={isCompiling}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
               >
