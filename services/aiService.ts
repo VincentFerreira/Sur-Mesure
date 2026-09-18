@@ -124,14 +124,31 @@ CRITICAL RULES — each field must contain ONE piece of information only, never 
 
 Return valid JSON only. No markdown, no code blocks, no extra keys.`;
 
-// Instance Gemini
-const geminiAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Lazy — constructing either SDK client eagerly at module load throws (both `new
+// GoogleGenAI` and `new Anthropic` reject an empty/undefined apiKey immediately,
+// "An API Key must be set when running in a browser") whenever GEMINI_API_KEY/
+// ANTHROPIC_API_KEY aren't set. That's the normal case for CI's e2e run — it
+// deliberately never uses a real provider (VITE_ATS_PROVIDER=fake, no secrets
+// checked in) — but this file is imported app-wide, so an eager throw here used to
+// crash the *entire* React bundle before any page could render, failing every e2e
+// test with "element not found" rather than the real error. Constructing on first
+// actual use means a missing key only matters if a real (non-fake) call is attempted.
+let _geminiAi: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI {
+    if (!_geminiAi) _geminiAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    return _geminiAi;
+}
 
-// Instance Claude
-const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-    dangerouslyAllowBrowser: true
-});
+let _anthropic: Anthropic | null = null;
+function getAnthropicClient(): Anthropic {
+    if (!_anthropic) {
+        _anthropic = new Anthropic({
+            apiKey: process.env.ANTHROPIC_API_KEY,
+            dangerouslyAllowBrowser: true
+        });
+    }
+    return _anthropic;
+}
 
 // Pinned to the cheapest tier on purpose — do not swap for a pricier model (e.g. a
 // "-flash" or "-pro" variant) without confirming the cost tradeoff first.
@@ -220,7 +237,7 @@ const parseWithGemini = async (pdfBase64: string): Promise<any> => {
     const startedAt = Date.now();
 
     try {
-    const response = await geminiAi.models.generateContent({
+    const response = await getGeminiClient().models.generateContent({
         model,
         contents: {
             parts: [
@@ -335,7 +352,7 @@ const parseWithClaude = async (pdfBase64: string): Promise<any> => {
     const startedAt = Date.now();
 
     try {
-    const response = await anthropic.messages.create({
+    const response = await getAnthropicClient().messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 8000,
         messages: [
@@ -588,7 +605,7 @@ const analyzeWithGemini = async (cvText: string, jobDescription: string): Promis
     const callGemini = async (promptText: string) => {
         const startedAt = Date.now();
         try {
-            const response = await geminiAi.models.generateContent({
+            const response = await getGeminiClient().models.generateContent({
                 model,
                 contents: { parts: [{ text: promptText }] },
                 config: {
@@ -664,7 +681,7 @@ const analyzeWithClaude = async (cvText: string, jobDescription: string): Promis
     const callClaude = async (maxTokens: number) => {
         const startedAt = Date.now();
         try {
-            const response = await anthropic.messages.create({
+            const response = await getAnthropicClient().messages.create({
                 model: "claude-sonnet-4-6",
                 max_tokens: maxTokens,
                 messages: [{ role: "user", content: prompt }]
@@ -893,7 +910,7 @@ const extractJobWithGemini = async (rawText: string): Promise<any> => {
     const startedAt = Date.now();
     const prompt = `${JOB_EXTRACTOR_PROMPT}\n\n== JOB POSTING ==\n${rawText}`;
     try {
-        const response = await geminiAi.models.generateContent({
+        const response = await getGeminiClient().models.generateContent({
             model,
             contents: { parts: [{ text: prompt }] },
             config: {
@@ -939,7 +956,7 @@ const extractJobWithClaude = async (rawText: string): Promise<any> => {
     const startedAt = Date.now();
     const prompt = `${JOB_EXTRACTOR_PROMPT}\n\n== JOB POSTING ==\n${rawText}`;
     try {
-        const response = await anthropic.messages.create({
+        const response = await getAnthropicClient().messages.create({
             model: "claude-sonnet-4-6",
             max_tokens: 1000,
             messages: [{ role: "user", content: prompt }],
