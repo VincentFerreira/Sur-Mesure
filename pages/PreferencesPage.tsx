@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { usePreferencesStore } from '../store/preferencesStore';
 import { useCvsStore } from '../store/cvsStore';
-import { CvMeta, JobWorkMode, SearchPreferences } from '../types';
+import { CvMeta, JobWorkMode, ScraperPortalId, SCRAPER_PORTAL_IDS, SearchPreferences } from '../types';
 import { SavePreferencesInput } from '../services/preferencesService';
 import TagInput, { TagInputHandle } from '../components/preferences/TagInput';
 
@@ -11,6 +11,27 @@ const WORK_MODE_OPTIONS: { value: JobWorkMode; label: string }[] = [
   { value: 'hybrid', label: 'Hybrid' },
   { value: 'remote', label: 'Remote' },
 ];
+
+// One line per server/scrapers/index.js portal id — kept here (not shared with the
+// server) since this is presentation copy, not a validation rule.
+const PORTAL_INFO: Record<ScraperPortalId, { label: string; description: string }> = {
+  france_travail: {
+    label: 'France Travail',
+    description: 'Official French public job board API — the most reliable source for France, no rate-limit risk.',
+  },
+  arbeitnow: {
+    label: 'Arbeitnow',
+    description: 'International job aggregator, no API key required — widens the search beyond France.',
+  },
+  freehire: {
+    label: 'FreeHire',
+    description: 'Public aggregator across ~50 ATS platforms (Greenhouse, Lever, etc.) — company-published listings.',
+  },
+  claude_cli: {
+    label: 'Claude web search',
+    description: 'AI-powered web search for boards without a public API — slower and billed per use.',
+  },
+};
 
 interface FormProps {
   initial: SearchPreferences;
@@ -24,6 +45,23 @@ const PreferencesForm: React.FC<FormProps> = ({ initial, cvs, onSave }) => {
   const [workModes, setWorkModes] = useState<JobWorkMode[]>(initial.workModes);
   const [minSalary, setMinSalary] = useState(initial.minGrossAnnualSalary != null ? String(initial.minGrossAnnualSalary) : '');
   const [cvId, setCvId] = useState(initial.cvId ?? '');
+  // Absent on `initial` (a preferences.json saved before this field existed) means
+  // "all enabled" — the implicit default this codebase already had.
+  const [enabledPortals, setEnabledPortals] = useState<ScraperPortalId[]>(initial.enabledPortals ?? [...SCRAPER_PORTAL_IDS]);
+  const [searchBudgetUsd, setSearchBudgetUsd] = useState(initial.searchBudgetUsd != null ? String(initial.searchBudgetUsd) : '');
+  const [autoDismissBelowScore, setAutoDismissBelowScore] = useState(
+    initial.autoDismissBelowScore != null ? String(initial.autoDismissBelowScore) : ''
+  );
+  const [franceTravailClientId, setFranceTravailClientId] = useState(initial.franceTravailClientId ?? '');
+  // Always starts blank — GET never returns the real secret (see
+  // SearchPreferences.franceTravailClientSecretConfigured), so there's nothing to
+  // pre-fill. Left blank on save means "keep whatever's already stored" (see
+  // handleSave below); the placeholder communicates whether one is already set.
+  const [franceTravailClientSecret, setFranceTravailClientSecret] = useState('');
+  // Tracked separately from `initial` (which never updates after mount — see the
+  // "No `key` here" comment on PreferencesPage below) so the placeholder reflects a
+  // secret just saved this session instead of staying stuck on "Not set" until reload.
+  const [secretConfigured, setSecretConfigured] = useState(initial.franceTravailClientSecretConfigured ?? false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -33,6 +71,11 @@ const PreferencesForm: React.FC<FormProps> = ({ initial, cvs, onSave }) => {
   const toggleWorkMode = (mode: JobWorkMode, checked: boolean) => {
     setSaved(false);
     setWorkModes((prev) => (checked ? [...prev, mode] : prev.filter((m) => m !== mode)));
+  };
+
+  const togglePortal = (portal: ScraperPortalId, checked: boolean) => {
+    setSaved(false);
+    setEnabledPortals((prev) => (checked ? [...prev, portal] : prev.filter((p) => p !== portal)));
   };
 
   const handleSave = async () => {
@@ -47,13 +90,22 @@ const PreferencesForm: React.FC<FormProps> = ({ initial, cvs, onSave }) => {
     const finalJobTitles = jobTitlesRef.current?.flush() ?? jobTitles;
     const finalLocations = locationsRef.current?.flush() ?? locations;
     try {
-      await onSave({
+      const result = await onSave({
         jobTitles: finalJobTitles,
         locations: finalLocations,
         workModes,
         minGrossAnnualSalary: minSalary.trim() ? Number(minSalary) : undefined,
         cvId: cvId || undefined,
+        enabledPortals,
+        searchBudgetUsd: searchBudgetUsd.trim() ? Number(searchBudgetUsd) : undefined,
+        autoDismissBelowScore: autoDismissBelowScore.trim() ? Number(autoDismissBelowScore) : undefined,
+        franceTravailClientId: franceTravailClientId.trim() || undefined,
+        // Omitted entirely (not sent as '') when untouched, so the server's "leave the
+        // stored secret alone" branch applies — see routes.preferences.js.
+        ...(franceTravailClientSecret.trim() ? { franceTravailClientSecret: franceTravailClientSecret.trim() } : {}),
       });
+      setFranceTravailClientSecret(''); // never keep the just-typed secret in memory longer than the request
+      setSecretConfigured(result.franceTravailClientSecretConfigured ?? false);
       setSaved(true);
     } catch {
       setError('Save error. Is the server running?');
@@ -127,6 +179,94 @@ const PreferencesForm: React.FC<FormProps> = ({ initial, cvs, onSave }) => {
               <option value="">— None —</option>
               {cvs.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-500">Scraping sources</label>
+            <div className="mt-1 space-y-2.5">
+              {SCRAPER_PORTAL_IDS.map((portal) => (
+                <div key={portal}>
+                  <label className="flex items-center gap-1.5 text-sm text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={enabledPortals.includes(portal)}
+                      onChange={(e) => togglePortal(portal, e.target.checked)}
+                      data-testid={`portal-${portal}-checkbox`}
+                    />
+                    {PORTAL_INFO[portal].label}
+                  </label>
+                  <p className="text-xs text-slate-400 mt-0.5 ml-5">{PORTAL_INFO[portal].description}</p>
+                  {portal === 'france_travail' && (
+                    <div className="ml-5 mt-2 space-y-2 max-w-sm">
+                      <div>
+                        <label className="text-xs font-medium text-slate-500">Client ID</label>
+                        <input
+                          type="text"
+                          value={franceTravailClientId}
+                          onChange={(e) => { setFranceTravailClientId(e.target.value); setSaved(false); }}
+                          data-testid="france-travail-client-id-input"
+                          className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-500">Client secret</label>
+                        <input
+                          type="password"
+                          value={franceTravailClientSecret}
+                          onChange={(e) => { setFranceTravailClientSecret(e.target.value); setSaved(false); }}
+                          placeholder={secretConfigured ? 'Saved — leave blank to keep' : 'Not set'}
+                          data-testid="france-travail-client-secret-input"
+                          className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                        />
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Free for personal use —{' '}
+                        <a
+                          href="https://francetravail.io"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-indigo-600 hover:underline"
+                        >
+                          get an API key on francetravail.io
+                        </a>
+                        .
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-500">Max AI web search budget (USD)</label>
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              value={searchBudgetUsd}
+              onChange={(e) => { setSearchBudgetUsd(e.target.value); setSaved(false); }}
+              placeholder="3"
+              data-testid="search-budget-input"
+              className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            />
+            <p className="text-xs text-slate-400 mt-0.5">Caps how much a single Claude web search run can spend before it stops itself.</p>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-500">Auto-dismiss below score</label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={5}
+              value={autoDismissBelowScore}
+              onChange={(e) => { setAutoDismissBelowScore(e.target.value); setSaved(false); }}
+              placeholder="45"
+              data-testid="auto-dismiss-score-input"
+              className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            />
+            <p className="text-xs text-slate-400 mt-0.5">Candidates scoring below this after AI qualification are auto-dismissed instead of listed as new.</p>
           </div>
         </div>
 

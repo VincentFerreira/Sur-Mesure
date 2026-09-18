@@ -10,13 +10,13 @@ export function testHooksEnabled() {
 }
 
 // Note: /api/__test__/reset below still wipes `dataDir` recursively, which would
-// delete the scraper-candidates .sqlite file out from under a *live* server's
-// already-open `candidatesDb` handle. Not fixed here: `reset` is never called against
-// a real running server in this codebase (grep-verified) — only inside
-// __tests__/server/testHooks.test.ts's own short-lived, throwaway app, which opens a
-// fresh candidatesDb per test and never asserts anything about scraper-candidates
-// across a reset.
-export function registerTestHooks(app, { dataDir, candidatesDb }) {
+// delete the scraper-candidates/observability .sqlite files out from under a *live*
+// server's already-open `candidatesDb`/`observabilityDb` handles. Not fixed here:
+// `reset` is never called against a real running server in this codebase
+// (grep-verified) — only inside __tests__/server/testHooks.test.ts's own short-lived,
+// throwaway app, which opens a fresh db per test and never asserts anything about
+// scraper-candidates/ai_calls across a reset.
+export function registerTestHooks(app, { dataDir, candidatesDb, observabilityDb }) {
     if (!testHooksEnabled()) return;
 
     app.post('/api/__test__/reset', async (_req, res) => {

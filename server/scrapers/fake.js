@@ -82,8 +82,21 @@ const BASE_SCORE = { high: 90, medium: 60, low: 20 };
 const DOWNGRADE_STEP = 30;
 const MAX_SIGNALS = 4;
 
-/** @returns {Promise<Record<string, {fit: string, score: number, signals: {label: string, polarity: string}[]}>>} */
-export async function qualifyAll(candidates, jobTitles, locations, cvText, workModes = []) {
+// Deterministic stand-in for claudeCli.js's rejection-memory scoring: a real prompt
+// judges semantic overlap between a candidate and a past rejection's stated reason,
+// which a fake heuristic can't approximate — so this only downgrades an exact company
+// match (case-insensitive), just enough to make the wiring (does the memory reach this
+// function and change a score at all) testable without a real AI call.
+function rejectedSameCompany(candidate, rejectionMemory) {
+    const company = (candidate.company ?? '').trim().toLowerCase();
+    if (!company) return undefined;
+    return rejectionMemory.find((r) => (r.company ?? '').trim().toLowerCase() === company);
+}
+
+// `mediumThreshold` mirrors claudeCli.js's qualifyAll — kept in parity so e2e (which
+// runs against this fake path) can exercise SearchPreferences.autoDismissBelowScore.
+/** @param {number} [mediumThreshold] @returns {Promise<Record<string, {fit: string, score: number, signals: {label: string, polarity: string}[]}>>} */
+export async function qualifyAll(candidates, jobTitles, locations, cvText, workModes = [], rejectionMemory = [], mediumThreshold) {
     const targetWords = new Set(jobTitles.join(' ').toLowerCase().match(/[a-z0-9]+/g) ?? []);
     const cvWords = cvText ? significantWords(cvText) : null;
     const map = {};
@@ -126,7 +139,13 @@ export async function qualifyAll(candidates, jobTitles, locations, cvText, workM
             }
         }
 
-        map[c.id] = { fit: fitFromScore(score), score, signals: signals.slice(0, MAX_SIGNALS) };
+        const rejectedMatch = rejectedSameCompany(c, rejectionMemory);
+        if (rejectedMatch) {
+            score = Math.max(0, score - DOWNGRADE_STEP);
+            signals.push({ label: 'Comme rejet précédent', polarity: 'negative' });
+        }
+
+        map[c.id] = { fit: fitFromScore(score, mediumThreshold), score, signals: signals.slice(0, MAX_SIGNALS) };
     }
     return map;
 }

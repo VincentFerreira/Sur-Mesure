@@ -38,6 +38,18 @@ describe('qualifyAll (fake)', () => {
         expect(result['1'].fit).toBe('low');
     });
 
+    it('respects a custom mediumThreshold (SearchPreferences.autoDismissBelowScore) instead of the default 45', async () => {
+        // Single-word title overlap ("qa") -> BASE_SCORE.medium (60), no other
+        // location/workMode/CV penalties applied (locations/workModes empty, no cvText).
+        const candidates = [{ id: '1', title: 'QA Consultant', company: 'Acme' }];
+        const defaultResult = await qualifyAll(candidates, ['QA Engineer'], [], undefined);
+        expect(defaultResult['1'].score).toBe(60);
+        expect(defaultResult['1'].fit).toBe('medium'); // 60 >= default 45
+
+        const raisedResult = await qualifyAll(candidates, ['QA Engineer'], [], undefined, [], [], 65);
+        expect(raisedResult['1'].fit).toBe('low'); // 60 < custom 65
+    });
+
     it('processes all candidates without losing any result', async () => {
         const candidates = Array.from({ length: 60 }, (_, i) => ({ id: String(i), title: 'QA Engineer', company: 'Acme' }));
         const result = await qualifyAll(candidates, ['QA Engineer'], [], undefined);
@@ -211,6 +223,38 @@ describe('qualifyAll (fake)', () => {
                 [],
                 undefined
             );
+            expect(result['1'].fit).toBe('high');
+        });
+    });
+
+    describe('with rejection memory', () => {
+        it('downgrades fit by one level and tags a candidate from a previously-rejected company', async () => {
+            const result = await qualifyAll(
+                [{ id: '1', title: 'Senior QA Engineer', company: 'Acme' }],
+                ['QA Engineer'],
+                [],
+                undefined,
+                [],
+                [{ title: 'QA Engineer', company: 'Acme', reason: 'ESN / régie' }]
+            );
+            expect(result['1'].fit).toBe('medium');
+            expect(result['1'].signals).toContainEqual({ label: 'Comme rejet précédent', polarity: 'negative' });
+        });
+
+        it('does not downgrade a candidate from an unrelated company', async () => {
+            const result = await qualifyAll(
+                [{ id: '1', title: 'Senior QA Engineer', company: 'Acme' }],
+                ['QA Engineer'],
+                [],
+                undefined,
+                [],
+                [{ title: 'QA Engineer', company: 'Other Co', reason: 'ESN / régie' }]
+            );
+            expect(result['1'].fit).toBe('high');
+        });
+
+        it('does not affect fit when no rejection memory is given (backward compatible)', async () => {
+            const result = await qualifyAll([{ id: '1', title: 'Senior QA Engineer', company: 'Acme' }], ['QA Engineer'], [], undefined);
             expect(result['1'].fit).toBe('high');
         });
     });

@@ -9,6 +9,7 @@ import EditorPage from './pages/EditorPage';
 import InsightsPage from './pages/InsightsPage';
 import PreferencesPage from './pages/PreferencesPage';
 import JobSearchPage from './pages/JobSearchPage';
+import ObservabilityPage from './pages/ObservabilityPage';
 
 const App: React.FC = () => (
   <BrowserRouter>
@@ -23,6 +24,7 @@ const App: React.FC = () => (
         <Route path="/insights" element={<InsightsPage />} />
         <Route path="/preferences" element={<PreferencesPage />} />
         <Route path="/job-search" element={<JobSearchPage />} />
+        <Route path="/observability" element={<ObservabilityPage />} />
         <Route path="*" element={<Navigate to="/jobs" replace />} />
       </Route>
     </Routes>

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { testHooksAvailable, unique } from '../helpers/jobs';
+import { API_URL } from '../helpers/apiUrl';
 
 // The Analyse page's cards aggregate across ALL discoveries/jobs in the shared data
 // directory (playwright.config.ts runs fullyParallel against one dir that other specs
@@ -35,7 +36,7 @@ test('a negative signal theme renders on the Découverte section', async ({ page
     firstSeenAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  await request.post('http://localhost:3001/api/__test__/seed', { data: { scrapedJobs: [candidate] } });
+  await request.post(`${API_URL}/api/__test__/seed`, { data: { scrapedJobs: [candidate] } });
 
   await page.goto('/insights');
   await expect(page.getByTestId('insights-section-search')).toBeVisible();
@@ -59,7 +60,7 @@ test('candidates without a score render an explicit "Non évalué" row, not sile
     firstSeenAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  await request.post('http://localhost:3001/api/__test__/seed', { data: { scrapedJobs: [candidate] } });
+  await request.post(`${API_URL}/api/__test__/seed`, { data: { scrapedJobs: [candidate] } });
 
   await page.goto('/insights');
   await expect(page.getByTestId('fit-row-unqualified')).toBeVisible();
@@ -87,7 +88,7 @@ test('a low-volume portal is listed as insufficient rather than ranked', async (
     firstSeenAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }));
-  await request.post('http://localhost:3001/api/__test__/seed', { data: { scrapedJobs: candidates } });
+  await request.post(`${API_URL}/api/__test__/seed`, { data: { scrapedJobs: candidates } });
 
   await page.goto('/insights');
   await expect(page.getByTestId('portal-insufficient')).toContainText('Volume insuffisant');
@@ -99,7 +100,7 @@ test('the CV section renders missing keywords (case-merged) and a recurring form
 
   const suffix = unique();
   const cvId = crypto.randomUUID();
-  await request.post('http://localhost:3001/api/__test__/seed', {
+  await request.post(`${API_URL}/api/__test__/seed`, {
     data: { cvs: [{ id: cvId, label: `Insights CV ${suffix}`, language: 'fr', tags: [], contentHash: 'hash-1', data: {} }] },
   });
 
@@ -116,11 +117,11 @@ test('the CV section renders missing keywords (case-merged) and a recurring form
   ];
 
   for (const [i, def] of jobDefs.entries()) {
-    const createRes = await request.post('http://localhost:3001/api/jobs', {
+    const createRes = await request.post(`${API_URL}/api/jobs`, {
       data: { company: `Insights Co ${suffix} ${i}`, title: 'QA Engineer', descriptionRaw: 'A QA role.' },
     });
     const job = await createRes.json();
-    await request.post(`http://localhost:3001/api/jobs/${job.id}/score`, {
+    await request.post(`${API_URL}/api/jobs/${job.id}/score`, {
       data: {
         cvId,
         cvContentHash: 'hash-1',
@@ -169,7 +170,7 @@ test('a job rejected after reaching interview shows up in the funnel exits, not 
     createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  await request.post('http://localhost:3001/api/__test__/seed', { data: { jobs: [job] } });
+  await request.post(`${API_URL}/api/__test__/seed`, { data: { jobs: [job] } });
 
   await page.goto('/insights');
   await expect(page.getByTestId('funnel-stage-interview')).toBeVisible();

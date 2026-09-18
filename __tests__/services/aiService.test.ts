@@ -1,3 +1,8 @@
+// @vitest-environment jsdom
+// aiService.ts now imports services/observabilityService.ts (AI call logging, see
+// recordAiCall) which imports apiClient.ts — apiClient reads `window.location` at
+// module scope, so this suite needs jsdom like cvStorageService.test.ts's, not the
+// project's default 'node' test environment.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // vi.hoisted so this mock function exists before the vi.mock factory below runs
@@ -5,6 +10,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // reference to control what the mocked Gemini client's generateContent resolves to,
 // per call.
 const mockGeminiGenerateContent = vi.hoisted(() => vi.fn());
+// Same reasoning for Claude: aiService.ts creates its `const anthropic = new
+// Anthropic(...)` once at module load, so this needs to be the single shared mock
+// instance the factory below hands back, not a fresh vi.fn() per `new Anthropic()`.
+const mockAnthropicCreate = vi.hoisted(() => vi.fn());
+const mockLogAiCall = vi.hoisted(() => vi.fn());
 
 // Mock SDKs before importing aiService (vi.mock is hoisted automatically)
 vi.mock('@google/genai', () => ({
@@ -21,11 +31,18 @@ vi.mock('@google/genai', () => ({
 
 vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn(() => ({
-    messages: { create: vi.fn() },
+    messages: { create: mockAnthropicCreate },
   })),
 }));
 
-import { serializeCVForATS, withTimeout } from '../../services/aiService';
+// Spied rather than left real: these tests assert exactly which/how many rows get
+// logged (the whole point of the terminal-failure logging fix below), and logAiCall
+// itself fires a real fetch to the API otherwise.
+vi.mock('../../services/observabilityService', () => ({
+  logAiCall: mockLogAiCall,
+}));
+
+import { serializeCVForATS, withTimeout, analyzeATS } from '../../services/aiService';
 import type { CVData } from '../../types';
 
 // ── Fixture ───────────────────────────────────────────────────────────────────
@@ -205,6 +222,74 @@ describe('withTimeout', () => {
     vi.advanceTimersByTime(5_001);
 
     await expect(resultPromise).rejects.toThrow('Timeout: the request took longer than 5s');
+  });
+});
+
+// ── analyzeATS error-path logging (the terminal-failure gap fix) ──────────────
+//
+// Before this fix, a call could fail *overall* (Gemini still RECITATION-blocked after
+// its one retry, or a final response that isn't valid JSON) while logging ZERO error
+// rows — each individual network attempt had already logged its own 'success' row (the
+// HTTP call itself worked), and the code that decides the whole analysis failed sat
+// outside any try/catch. These tests assert the fix: exactly one extra error row now
+// appears for "the analysis as a whole failed", on top of the per-attempt success rows.
+
+describe('analyzeATS error-path logging (the terminal-failure gap fix)', () => {
+  beforeEach(() => {
+    mockGeminiGenerateContent.mockReset();
+    mockAnthropicCreate.mockReset();
+    mockLogAiCall.mockClear();
+    // getBestGeminiModel() discovers the model via a real fetch() call — stubbed so
+    // it resolves deterministically instead of hitting the network.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            models: [{ name: 'models/gemini-3.1-flash-lite', supportedGenerationMethods: ['generateContent'], outputTokenLimit: 65536 }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('logs an error row when Gemini RECITATION persists after the retry', async () => {
+    mockGeminiGenerateContent.mockResolvedValue({
+      text: undefined,
+      candidates: [{ finishReason: 'RECITATION' }],
+      usageMetadata: {},
+    });
+
+    await expect(analyzeATS(makeCV(), 'some job description', 'gemini')).rejects.toThrow(/content-safety filter/);
+
+    const errorCalls = mockLogAiCall.mock.calls.map(([arg]) => arg).filter((c) => c.status === 'error');
+    expect(errorCalls).toHaveLength(1);
+    expect(errorCalls[0].errorMessage).toContain('content-safety filter');
+    expect(errorCalls[0].operation).toBe('analyze_ats');
+    // Each of the two attempts (base prompt + RECITATION retry) still logged its own
+    // 'success' row for the network call itself — this fix adds a third row, it
+    // doesn't replace those.
+    expect(mockLogAiCall.mock.calls.filter(([c]) => c.status === 'success')).toHaveLength(2);
+  });
+
+  it('logs an error row when Claude\'s final response is not valid JSON', async () => {
+    mockAnthropicCreate.mockResolvedValue({
+      content: [{ type: 'text', text: 'not valid json at all' }],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 10, output_tokens: 5 },
+    });
+
+    await expect(analyzeATS(makeCV(), 'some job description', 'claude')).rejects.toThrow();
+
+    const errorCalls = mockLogAiCall.mock.calls.map(([arg]) => arg).filter((c) => c.status === 'error');
+    expect(errorCalls).toHaveLength(1);
+    expect(errorCalls[0].errorDetail).toBe('not valid json at all');
+    expect(errorCalls[0].operation).toBe('analyze_ats');
   });
 });
 

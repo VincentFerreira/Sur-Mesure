@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createCv, createJob, testHooksAvailable, unique } from '../helpers/jobs';
+import { API_URL } from '../helpers/apiUrl';
 
 test('T1 - creating a job by pasting a description adds it to the table at status lead', async ({ page }) => {
   const company = `Acme-${unique()}`;
@@ -61,7 +62,7 @@ test('T8 - filtering on "stale score only" shows only jobs whose score is out of
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
-  await request.post('http://localhost:3001/api/__test__/seed', { data: { cvs: [cv] } });
+  await request.post(`${API_URL}/api/__test__/seed`, { data: { cvs: [cv] } });
 
   const fakeAnalysis = {
     overallScore: 80,
@@ -73,11 +74,11 @@ test('T8 - filtering on "stale score only" shows only jobs whose score is out of
     summary: 'Seeded for the stale-only filter test.',
   };
 
-  const staleJob = await request.post('http://localhost:3001/api/jobs', {
+  const staleJob = await request.post(`${API_URL}/api/jobs`, {
     data: { company: staleCompany, title: 'Stale Role', descriptionRaw: 'desc' },
   });
   const { id: staleJobId } = await staleJob.json();
-  await request.post(`http://localhost:3001/api/jobs/${staleJobId}/score`, {
+  await request.post(`${API_URL}/api/jobs/${staleJobId}/score`, {
     data: {
       cvId: cv.id,
       cvContentHash: 'hash-outdated',
@@ -91,11 +92,11 @@ test('T8 - filtering on "stale score only" shows only jobs whose score is out of
     },
   });
 
-  const freshJob = await request.post('http://localhost:3001/api/jobs', {
+  const freshJob = await request.post(`${API_URL}/api/jobs`, {
     data: { company: freshCompany, title: 'Fresh Role', descriptionRaw: 'desc' },
   });
   const { id: freshJobId } = await freshJob.json();
-  await request.post(`http://localhost:3001/api/jobs/${freshJobId}/score`, {
+  await request.post(`${API_URL}/api/jobs/${freshJobId}/score`, {
     data: {
       cvId: cv.id,
       cvContentHash: cv.contentHash,

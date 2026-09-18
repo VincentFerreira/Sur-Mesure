@@ -49,6 +49,15 @@ describe('normalize', () => {
         });
     });
 
+    it('maps job.slug onto externalId when present', () => {
+        const job = {
+            title: 'Backend Engineer',
+            company_name: 'Acme GmbH',
+            slug: 'acme-gmbh-backend-engineer',
+        };
+        expect(normalize(job).externalId).toBe('acme-gmbh-backend-engineer');
+    });
+
     it('falls back to "Unknown company" when company_name is missing', () => {
         expect(normalize({ title: 't', company_name: '', url: 'u' }).company).toBe('Unknown company');
     });

@@ -1,7 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
-import { CVData, ATSAnalysisResult, ATSKeyword, JobWorkMode, JobContractType } from "../types";
+import { CVData, ATSAnalysisResult, ATSKeyword, JobWorkMode, JobContractType, AiCallOperation, AiCallProvider, AiCallStatus } from "../types";
 import { getLangText, getLangArray, LANGUAGE_CODES } from '../lib/i18n';
+import { logAiCall } from './observabilityService';
 
 // Types pour le provider IA
 export type AIProvider = 'gemini' | 'claude' | 'fake';
@@ -27,17 +28,72 @@ const thinkingConfigFor = (model: string) => ({ thinkingBudget: model.includes('
 // `wasTruncated` should reflect the provider's own stop/finish reason where the caller
 // can determine it, so the message only claims "cut off" when that's actually what
 // happened rather than for any malformed-JSON response.
+// Any thrown Error may carry an own `.rawText` property with whatever raw diagnostic
+// text was available at the point of failure (the unparsed response body, the raw
+// non-text content a model returned instead) — surfaced to the Observability page as
+// `errorDetail` via errorDetailOf(), so "investigate what really happened" has
+// something concrete to show beyond the short thrown message.
+function withRawText(err: unknown, rawText: string): Error {
+    const e = err instanceof Error ? err : new Error(String(err));
+    return Object.assign(e, { rawText });
+}
+const errorDetailOf = (err: unknown): string | undefined => (err as { rawText?: string } | undefined)?.rawText;
+
 const parseAiJson = (text: string, context: string, wasTruncated: boolean = true): any => {
     try {
         return JSON.parse(text);
     } catch {
-        throw new Error(
-            wasTruncated
-                ? `The ${context} response was cut off before it finished (likely too long to fit the model's output limit) and could not be parsed. Try again, or with a shorter/more concise job description.`
-                : `The ${context} response wasn't valid JSON and could not be parsed. Please try again.`
+        throw withRawText(
+            new Error(
+                wasTruncated
+                    ? `The ${context} response was cut off before it finished (likely too long to fit the model's output limit) and could not be parsed. Try again, or with a shorter/more concise job description.`
+                    : `The ${context} response wasn't valid JSON and could not be parsed. Please try again.`
+            ),
+            text
         );
     }
 };
+
+// Logs one row per actual network attempt to the Observability page (fire-and-forget,
+// see services/observabilityService.ts) — a retried call (Gemini RECITATION, Claude
+// max_tokens) produces two rows, which correctly reflects two real calls having been
+// made, not one. `status: 'error'` covers both a network/SDK-level failure and a
+// response that came back but couldn't be turned into usable data (empty text,
+// unparsable JSON) — from the observability page's perspective, both mean the call
+// didn't deliver.
+function recordAiCall(params: {
+    provider: AiCallProvider;
+    operation: AiCallOperation;
+    model?: string;
+    startedAt: number;
+    status: AiCallStatus;
+    errorMessage?: string;
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+    finishReason?: string;
+    metadata?: Record<string, unknown>;
+    prompt?: string;
+    responseText?: string;
+    errorDetail?: string;
+}): void {
+    logAiCall({
+        provider: params.provider,
+        operation: params.operation,
+        model: params.model,
+        durationMs: Date.now() - params.startedAt,
+        status: params.status,
+        errorMessage: params.errorMessage,
+        promptTokens: params.promptTokens,
+        completionTokens: params.completionTokens,
+        totalTokens: params.totalTokens,
+        finishReason: params.finishReason,
+        metadata: params.metadata,
+        prompt: params.prompt,
+        responseText: params.responseText,
+        errorDetail: params.errorDetail,
+    });
+}
 
 // Prompt partagé pour l'extraction de CV
 const RESUME_PARSER_PROMPT = `You are an expert resume parser. Extract information from the PDF resume into the JSON structure below.
@@ -68,14 +124,31 @@ CRITICAL RULES — each field must contain ONE piece of information only, never 
 
 Return valid JSON only. No markdown, no code blocks, no extra keys.`;
 
-// Instance Gemini
-const geminiAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Lazy — constructing either SDK client eagerly at module load throws (both `new
+// GoogleGenAI` and `new Anthropic` reject an empty/undefined apiKey immediately,
+// "An API Key must be set when running in a browser") whenever GEMINI_API_KEY/
+// ANTHROPIC_API_KEY aren't set. That's the normal case for CI's e2e run — it
+// deliberately never uses a real provider (VITE_ATS_PROVIDER=fake, no secrets
+// checked in) — but this file is imported app-wide, so an eager throw here used to
+// crash the *entire* React bundle before any page could render, failing every e2e
+// test with "element not found" rather than the real error. Constructing on first
+// actual use means a missing key only matters if a real (non-fake) call is attempted.
+let _geminiAi: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI {
+    if (!_geminiAi) _geminiAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    return _geminiAi;
+}
 
-// Instance Claude
-const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-    dangerouslyAllowBrowser: true
-});
+let _anthropic: Anthropic | null = null;
+function getAnthropicClient(): Anthropic {
+    if (!_anthropic) {
+        _anthropic = new Anthropic({
+            apiKey: process.env.ANTHROPIC_API_KEY,
+            dangerouslyAllowBrowser: true
+        });
+    }
+    return _anthropic;
+}
 
 // Pinned to the cheapest tier on purpose — do not swap for a pricier model (e.g. a
 // "-flash" or "-pro" variant) without confirming the cost tradeoff first.
@@ -161,8 +234,10 @@ const geminiMaxOutputTokens = (): number => {
 const parseWithGemini = async (pdfBase64: string): Promise<any> => {
     const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, "");
     const model = await getBestGeminiModel();
+    const startedAt = Date.now();
 
-    const response = await geminiAi.models.generateContent({
+    try {
+    const response = await getGeminiClient().models.generateContent({
         model,
         contents: {
             parts: [
@@ -246,14 +321,38 @@ const parseWithGemini = async (pdfBase64: string): Promise<any> => {
     });
 
     if (!response.text) throw new Error('Empty response from Gemini');
-    return parseAiJson(response.text, 'resume parsing');
+    const result = parseAiJson(response.text, 'resume parsing');
+    recordAiCall({
+        provider: 'gemini', operation: 'parse_cv', model, startedAt, status: 'success',
+        promptTokens: response.usageMetadata?.promptTokenCount,
+        completionTokens: response.usageMetadata?.candidatesTokenCount,
+        totalTokens: response.usageMetadata?.totalTokenCount,
+        prompt: RESUME_PARSER_PROMPT,
+        responseText: response.text,
+        // The PDF binary is never logged (too large, not text) — only its approximate
+        // decoded size, so the detail view can show "+1 PDF (~X KB)" next to the prompt.
+        metadata: { attachmentSizeBytes: Math.round(cleanBase64.length * 0.75) },
+    });
+    return result;
+    } catch (err) {
+        recordAiCall({
+            provider: 'gemini', operation: 'parse_cv', model, startedAt, status: 'error',
+            errorMessage: err instanceof Error ? err.message : String(err),
+            prompt: RESUME_PARSER_PROMPT,
+            errorDetail: errorDetailOf(err),
+            metadata: { attachmentSizeBytes: Math.round(cleanBase64.length * 0.75) },
+        });
+        throw err;
+    }
 };
 
 // Parse avec Claude
 const parseWithClaude = async (pdfBase64: string): Promise<any> => {
     const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, "");
+    const startedAt = Date.now();
 
-    const response = await anthropic.messages.create({
+    try {
+    const response = await getAnthropicClient().messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 8000,
         messages: [
@@ -280,7 +379,7 @@ const parseWithClaude = async (pdfBase64: string): Promise<any> => {
     // Extraire le texte de la réponse
     const textContent = response.content.find(c => c.type === 'text');
     if (!textContent || textContent.type !== 'text') {
-        throw new Error('No text response from Claude');
+        throw withRawText(new Error('No text response from Claude'), JSON.stringify(response.content));
     }
 
     // Nettoyer le JSON (enlever les backticks markdown si présents)
@@ -291,7 +390,28 @@ const parseWithClaude = async (pdfBase64: string): Promise<any> => {
         jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
     }
 
-    return parseAiJson(jsonText, 'resume parsing');
+    const result = parseAiJson(jsonText, 'resume parsing');
+    recordAiCall({
+        provider: 'claude', operation: 'parse_cv', model: 'claude-sonnet-4-6', startedAt, status: 'success',
+        promptTokens: response.usage?.input_tokens,
+        completionTokens: response.usage?.output_tokens,
+        totalTokens: response.usage ? response.usage.input_tokens + response.usage.output_tokens : undefined,
+        finishReason: response.stop_reason ?? undefined,
+        prompt: RESUME_PARSER_PROMPT,
+        responseText: jsonText,
+        metadata: { attachmentSizeBytes: Math.round(cleanBase64.length * 0.75) },
+    });
+    return result;
+    } catch (err) {
+        recordAiCall({
+            provider: 'claude', operation: 'parse_cv', model: 'claude-sonnet-4-6', startedAt, status: 'error',
+            errorMessage: err instanceof Error ? err.message : String(err),
+            prompt: RESUME_PARSER_PROMPT,
+            errorDetail: errorDetailOf(err),
+            metadata: { attachmentSizeBytes: Math.round(cleanBase64.length * 0.75) },
+        });
+        throw err;
+    }
 };
 
 const TIMEOUT_MS = 90_000;
@@ -472,72 +592,149 @@ const analyzeWithGemini = async (cvText: string, jobDescription: string): Promis
     const model = await getBestGeminiModel();
     const basePrompt = `${ATS_ANALYZER_PROMPT}\n\n== CV CONTENT ==\n${cvText}\n\n== JOB DESCRIPTION ==\n${jobDescription}`;
     const maxOutputTokens = geminiMaxOutputTokens();
+    // Captured once, separate from each attempt's own startedAt inside callGemini —
+    // used only by the tail try/catch below, to log the *whole analysis's* eventual
+    // failure (RECITATION even after retry, unparsable JSON) as its own row, since
+    // that failure reason is otherwise never logged: each individual callGemini
+    // attempt already logged its own 'success' row (the HTTP call itself succeeded).
+    const analysisStartedAt = Date.now();
+    let lastPrompt = basePrompt;
 
+    // Logs one row per attempt (see recordAiCall) — a RECITATION-triggered retry below
+    // is two real calls, so it must produce two rows, not one.
     const callGemini = async (promptText: string) => {
-        const response = await geminiAi.models.generateContent({
-            model,
-            contents: { parts: [{ text: promptText }] },
-            config: {
-                responseMimeType: "application/json",
-                thinkingConfig: thinkingConfigFor(model),
-                maxOutputTokens,
-                responseSchema: ATS_RESPONSE_SCHEMA
-            }
-        });
-        const finishReason = response.candidates?.[0]?.finishReason;
-        console.log('[Gemini ATS]', { model, maxOutputTokens, finishReason, usage: response.usageMetadata });
-        return { text: response.text, finishReason };
+        const startedAt = Date.now();
+        try {
+            const response = await getGeminiClient().models.generateContent({
+                model,
+                contents: { parts: [{ text: promptText }] },
+                config: {
+                    responseMimeType: "application/json",
+                    thinkingConfig: thinkingConfigFor(model),
+                    maxOutputTokens,
+                    responseSchema: ATS_RESPONSE_SCHEMA
+                }
+            });
+            const finishReason = response.candidates?.[0]?.finishReason;
+            console.log('[Gemini ATS]', { model, maxOutputTokens, finishReason, usage: response.usageMetadata });
+            recordAiCall({
+                provider: 'gemini', operation: 'analyze_ats', model, startedAt, status: 'success', finishReason,
+                promptTokens: response.usageMetadata?.promptTokenCount,
+                completionTokens: response.usageMetadata?.candidatesTokenCount,
+                totalTokens: response.usageMetadata?.totalTokenCount,
+                prompt: promptText,
+                responseText: response.text,
+            });
+            return { text: response.text, finishReason };
+        } catch (err) {
+            recordAiCall({
+                provider: 'gemini', operation: 'analyze_ats', model, startedAt, status: 'error',
+                errorMessage: err instanceof Error ? err.message : String(err),
+                prompt: promptText,
+                errorDetail: errorDetailOf(err),
+            });
+            throw err;
+        }
     };
 
-    let { text, finishReason } = await callGemini(basePrompt);
-    if (finishReason === 'RECITATION') {
-        // Retrying with the exact same prompt would very likely hit the same wall —
-        // the cutoff is about *what* was being generated, not a token budget. A
-        // stronger paraphrasing instruction usually avoids it on the second pass.
-        ({ text, finishReason } = await callGemini(basePrompt + ATS_ANTI_RECITATION_REMINDER));
-    }
+    try {
+        let { text, finishReason } = await callGemini(basePrompt);
+        if (finishReason === 'RECITATION') {
+            // Retrying with the exact same prompt would very likely hit the same wall —
+            // the cutoff is about *what* was being generated, not a token budget. A
+            // stronger paraphrasing instruction usually avoids it on the second pass.
+            lastPrompt = basePrompt + ATS_ANTI_RECITATION_REMINDER;
+            ({ text, finishReason } = await callGemini(lastPrompt));
+        }
 
-    if (finishReason === 'RECITATION') {
-        throw new Error("The ATS analysis response was cut short by Gemini's content-safety filter (it detected the output reciting long verbatim passages from the job description) and could not be parsed. This usually happens with job postings copied from public listings — try again, it sometimes succeeds on a retry.");
+        if (finishReason === 'RECITATION') {
+            throw new Error("The ATS analysis response was cut short by Gemini's content-safety filter (it detected the output reciting long verbatim passages from the job description) and could not be parsed. This usually happens with job postings copied from public listings — try again, it sometimes succeeds on a retry.");
+        }
+        if (finishReason === 'SAFETY') {
+            throw new Error('The ATS analysis response was blocked by Gemini\'s safety filters and could not be parsed. Try again, or check the job description for content that might trigger this.');
+        }
+        if (!text) throw new Error('Empty response from Gemini');
+        return parseAiJson(text, 'ATS analysis', finishReason === 'MAX_TOKENS');
+    } catch (err) {
+        // Each callGemini attempt already logged its own 'success' row (the network
+        // call itself worked) — this row is specifically "the analysis as a whole
+        // failed", the gap that otherwise left zero trace of RECITATION-after-retry or
+        // an unparsable final response.
+        recordAiCall({
+            provider: 'gemini', operation: 'analyze_ats', model, startedAt: analysisStartedAt, status: 'error',
+            errorMessage: err instanceof Error ? err.message : String(err),
+            prompt: lastPrompt,
+            errorDetail: errorDetailOf(err),
+        });
+        throw err;
     }
-    if (finishReason === 'SAFETY') {
-        throw new Error('The ATS analysis response was blocked by Gemini\'s safety filters and could not be parsed. Try again, or check the job description for content that might trigger this.');
-    }
-    if (!text) throw new Error('Empty response from Gemini');
-    return parseAiJson(text, 'ATS analysis', finishReason === 'MAX_TOKENS');
 };
 
 const analyzeWithClaude = async (cvText: string, jobDescription: string): Promise<any> => {
     const prompt = `${ATS_ANALYZER_PROMPT}\n\n== CV CONTENT ==\n${cvText}\n\n== JOB DESCRIPTION ==\n${jobDescription}`;
+    // Captured once — see analyzeWithGemini's analysisStartedAt for why: logs "the
+    // whole analysis failed" (unparsable final response) as its own row, distinct from
+    // each attempt's own already-logged 'success' row.
+    const analysisStartedAt = Date.now();
 
+    // Logs one row per attempt — a max_tokens-triggered retry below is two real calls.
     const callClaude = async (maxTokens: number) => {
-        const response = await anthropic.messages.create({
-            model: "claude-sonnet-4-6",
-            max_tokens: maxTokens,
-            messages: [{ role: "user", content: prompt }]
-        });
+        const startedAt = Date.now();
+        try {
+            const response = await getAnthropicClient().messages.create({
+                model: "claude-sonnet-4-6",
+                max_tokens: maxTokens,
+                messages: [{ role: "user", content: prompt }]
+            });
 
-        const textContent = response.content.find(c => c.type === 'text');
-        if (!textContent || textContent.type !== 'text') {
-            throw new Error('No text response from Claude');
+            const textContent = response.content.find(c => c.type === 'text');
+            if (!textContent || textContent.type !== 'text') {
+                throw withRawText(new Error('No text response from Claude'), JSON.stringify(response.content));
+            }
+
+            let jsonText = textContent.text.trim();
+            if (jsonText.startsWith('```json')) {
+                jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+            } else if (jsonText.startsWith('```')) {
+                jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+            }
+
+            recordAiCall({
+                provider: 'claude', operation: 'analyze_ats', model: 'claude-sonnet-4-6', startedAt, status: 'success',
+                finishReason: response.stop_reason ?? undefined,
+                promptTokens: response.usage?.input_tokens,
+                completionTokens: response.usage?.output_tokens,
+                totalTokens: response.usage ? response.usage.input_tokens + response.usage.output_tokens : undefined,
+                prompt,
+                responseText: jsonText,
+            });
+            return { jsonText, truncated: response.stop_reason === 'max_tokens' };
+        } catch (err) {
+            recordAiCall({
+                provider: 'claude', operation: 'analyze_ats', model: 'claude-sonnet-4-6', startedAt, status: 'error',
+                errorMessage: err instanceof Error ? err.message : String(err),
+                prompt,
+                errorDetail: errorDetailOf(err),
+            });
+            throw err;
         }
-
-        let jsonText = textContent.text.trim();
-        if (jsonText.startsWith('```json')) {
-            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        } else if (jsonText.startsWith('```')) {
-            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
-        }
-
-        return { jsonText, truncated: response.stop_reason === 'max_tokens' };
     };
 
-    let { jsonText, truncated } = await callClaude(ATS_CLAUDE_MAX_TOKENS);
-    if (truncated) {
-        ({ jsonText, truncated } = await callClaude(ATS_CLAUDE_RETRY_MAX_TOKENS));
+    try {
+        let { jsonText, truncated } = await callClaude(ATS_CLAUDE_MAX_TOKENS);
+        if (truncated) {
+            ({ jsonText, truncated } = await callClaude(ATS_CLAUDE_RETRY_MAX_TOKENS));
+        }
+        return parseAiJson(jsonText, 'ATS analysis', truncated);
+    } catch (err) {
+        recordAiCall({
+            provider: 'claude', operation: 'analyze_ats', model: 'claude-sonnet-4-6', startedAt: analysisStartedAt, status: 'error',
+            errorMessage: err instanceof Error ? err.message : String(err),
+            prompt,
+            errorDetail: errorDetailOf(err),
+        });
+        throw err;
     }
-
-    return parseAiJson(jsonText, 'ATS analysis', truncated);
 };
 
 // Deterministic, offline stand-in for the real LLM analyzers — no network call, same output
@@ -600,7 +797,15 @@ export const analyzeATS = async (
     provider: AIProvider = 'gemini'
 ): Promise<ATSAnalysisResult> => {
     const cvText = serializeCVForATS(cvData);
-    if (provider === 'fake') return analyzeWithFake(cvText, jobDescription);
+    if (provider === 'fake') {
+        const startedAt = Date.now();
+        const result = analyzeWithFake(cvText, jobDescription);
+        recordAiCall({
+            provider: 'fake', operation: 'analyze_ats', model: 'fake-keyword-match-v1', startedAt, status: 'success',
+            responseText: JSON.stringify(result),
+        });
+        return result;
+    }
     return withTimeout(
         provider === 'claude'
             ? analyzeWithClaude(cvText, jobDescription)
@@ -702,47 +907,90 @@ Return ONLY valid JSON, no markdown, no code blocks. Exact schema:
 
 const extractJobWithGemini = async (rawText: string): Promise<any> => {
     const model = await getBestGeminiModel();
-    const response = await geminiAi.models.generateContent({
-        model,
-        contents: { parts: [{ text: `${JOB_EXTRACTOR_PROMPT}\n\n== JOB POSTING ==\n${rawText}` }] },
-        config: {
-            responseMimeType: "application/json",
-            thinkingConfig: thinkingConfigFor(model),
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    company: { type: Type.STRING },
-                    title: { type: Type.STRING },
-                    location: { type: Type.STRING },
-                    workMode: { type: Type.STRING },
-                    contractType: { type: Type.STRING },
-                    salaryRange: { type: Type.STRING },
-                    keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+    const startedAt = Date.now();
+    const prompt = `${JOB_EXTRACTOR_PROMPT}\n\n== JOB POSTING ==\n${rawText}`;
+    try {
+        const response = await getGeminiClient().models.generateContent({
+            model,
+            contents: { parts: [{ text: prompt }] },
+            config: {
+                responseMimeType: "application/json",
+                thinkingConfig: thinkingConfigFor(model),
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        company: { type: Type.STRING },
+                        title: { type: Type.STRING },
+                        location: { type: Type.STRING },
+                        workMode: { type: Type.STRING },
+                        contractType: { type: Type.STRING },
+                        salaryRange: { type: Type.STRING },
+                        keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    },
                 },
             },
-        },
-    });
-    if (!response.text) throw new Error('Empty response from Gemini');
-    return parseAiJson(response.text, 'job posting extraction');
+        });
+        if (!response.text) throw new Error('Empty response from Gemini');
+        const result = parseAiJson(response.text, 'job posting extraction');
+        recordAiCall({
+            provider: 'gemini', operation: 'extract_job', model, startedAt, status: 'success',
+            promptTokens: response.usageMetadata?.promptTokenCount,
+            completionTokens: response.usageMetadata?.candidatesTokenCount,
+            totalTokens: response.usageMetadata?.totalTokenCount,
+            prompt,
+            responseText: response.text,
+        });
+        return result;
+    } catch (err) {
+        recordAiCall({
+            provider: 'gemini', operation: 'extract_job', model, startedAt, status: 'error',
+            errorMessage: err instanceof Error ? err.message : String(err),
+            prompt,
+            errorDetail: errorDetailOf(err),
+        });
+        throw err;
+    }
 };
 
 const extractJobWithClaude = async (rawText: string): Promise<any> => {
-    const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: `${JOB_EXTRACTOR_PROMPT}\n\n== JOB POSTING ==\n${rawText}` }],
-    });
-    const textContent = response.content.find(c => c.type === 'text');
-    if (!textContent || textContent.type !== 'text') {
-        throw new Error('No text response from Claude');
+    const startedAt = Date.now();
+    const prompt = `${JOB_EXTRACTOR_PROMPT}\n\n== JOB POSTING ==\n${rawText}`;
+    try {
+        const response = await getAnthropicClient().messages.create({
+            model: "claude-sonnet-4-6",
+            max_tokens: 1000,
+            messages: [{ role: "user", content: prompt }],
+        });
+        const textContent = response.content.find(c => c.type === 'text');
+        if (!textContent || textContent.type !== 'text') {
+            throw withRawText(new Error('No text response from Claude'), JSON.stringify(response.content));
+        }
+        let jsonText = textContent.text.trim();
+        if (jsonText.startsWith('```json')) {
+            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (jsonText.startsWith('```')) {
+            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+        const result = parseAiJson(jsonText, 'job posting extraction');
+        recordAiCall({
+            provider: 'claude', operation: 'extract_job', model: 'claude-sonnet-4-6', startedAt, status: 'success',
+            promptTokens: response.usage?.input_tokens,
+            completionTokens: response.usage?.output_tokens,
+            totalTokens: response.usage ? response.usage.input_tokens + response.usage.output_tokens : undefined,
+            finishReason: response.stop_reason ?? undefined,
+            prompt,
+            responseText: jsonText,
+        });
+        return result;
+    } catch (err) {
+        recordAiCall({
+            provider: 'claude', operation: 'extract_job', model: 'claude-sonnet-4-6', startedAt, status: 'error',
+            errorMessage: err instanceof Error ? err.message : String(err),
+            prompt,
+            errorDetail: errorDetailOf(err),
+        });
+        throw err;
     }
-    let jsonText = textContent.text.trim();
-    if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (jsonText.startsWith('```')) {
-        jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-    return parseAiJson(jsonText, 'job posting extraction');
 };
 
 const WORK_MODE_HINTS: [RegExp, JobWorkMode][] = [[/remote/i, 'remote'], [/hybrid/i, 'hybrid'], [/on-?site/i, 'onsite']];
@@ -774,7 +1022,15 @@ export const extractJobFromText = async (
     rawText: string,
     provider: AIProvider = 'gemini'
 ): Promise<ExtractedJobFields> => {
-    if (provider === 'fake') return extractJobFake(rawText);
+    if (provider === 'fake') {
+        const startedAt = Date.now();
+        const result = extractJobFake(rawText);
+        recordAiCall({
+            provider: 'fake', operation: 'extract_job', model: 'fake-keyword-match-v1', startedAt, status: 'success',
+            responseText: JSON.stringify(result),
+        });
+        return result;
+    }
     const extracted = await withTimeout(
         provider === 'claude' ? extractJobWithClaude(rawText) : extractJobWithGemini(rawText)
     );

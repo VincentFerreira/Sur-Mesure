@@ -9,12 +9,13 @@ const originalClientSecret = process.env.FRANCE_TRAVAIL_CLIENT_SECRET;
 // would otherwise silently pass on the previous test's still-cached token instead of
 // exercising the credential check at all).
 let search: typeof import('../../server/scrapers/franceTravail.js').search;
+let configureCredentials: typeof import('../../server/scrapers/franceTravail.js').configureCredentials;
 
 beforeEach(async () => {
     process.env.FRANCE_TRAVAIL_CLIENT_ID = 'test-id';
     process.env.FRANCE_TRAVAIL_CLIENT_SECRET = 'test-secret';
     vi.resetModules();
-    ({ search } = await import('../../server/scrapers/franceTravail.js'));
+    ({ search, configureCredentials } = await import('../../server/scrapers/franceTravail.js'));
 });
 
 afterEach(() => {
@@ -28,7 +29,7 @@ afterEach(() => {
 type MockResponse = { ok: boolean; status: number; json: () => Promise<unknown> };
 function mockTokenThenSearch(searchResponses: Array<Record<string, unknown> | (() => MockResponse)>) {
     const searchQueue = [...searchResponses];
-    const fetchMock = vi.fn(async (url: string) => {
+    const fetchMock = vi.fn(async (url: string, _init?: { headers?: Record<string, string> }) => {
         if (url.includes('access_token')) {
             return { ok: true, status: 200, json: async () => ({ access_token: 'fake-token', expires_in: 1200 }) };
         }
@@ -83,6 +84,23 @@ describe('search (franceTravail)', () => {
         ]);
     });
 
+    it('maps offre.id onto externalId when present', async () => {
+        mockTokenThenSearch([
+            {
+                resultats: [
+                    {
+                        id: '203TXPY',
+                        intitule: 'QA Engineer',
+                        entreprise: { nom: 'Acme' },
+                        origineOffre: { urlOrigine: 'https://candidat.francetravail.fr/offres/recherche/detail/123' },
+                    },
+                ],
+            },
+        ]);
+        const results = await search({ query: 'QA Engineer' });
+        expect(results[0].externalId).toBe('203TXPY');
+    });
+
     it('treats a 204 (zero matches) as an empty result, not an error — the API\'s own way of reporting no matches for a query', async () => {
         const fetchMock = mockTokenThenSearch([() => ({ ok: true, status: 204, json: async () => { throw new SyntaxError('Unexpected end of JSON input'); } })]);
 
@@ -121,5 +139,67 @@ describe('search (franceTravail)', () => {
         delete process.env.FRANCE_TRAVAIL_CLIENT_ID;
         delete process.env.FRANCE_TRAVAIL_CLIENT_SECRET;
         await expect(search({ query: 'QA Engineer' })).rejects.toThrow('FRANCE_TRAVAIL_CLIENT_ID');
+    });
+
+    it('sends a Range header requesting at most MAX_RESULTS offers', async () => {
+        const fetchMock = mockTokenThenSearch([{ resultats: [] }]);
+        await search({ query: 'QA Engineer' });
+
+        const searchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/offres/search'));
+        const headers = (searchCall?.[1] as { headers?: Record<string, string> })?.headers;
+        expect(headers?.Range).toBe('offres=0-49');
+    });
+
+    it('hard-caps results to MAX_RESULTS even when the upstream API ignores the Range header and returns more', async () => {
+        const resultats = Array.from({ length: 80 }, (_, i) => ({
+            id: `offer-${i}`,
+            intitule: `QA Engineer ${i}`,
+            entreprise: { nom: 'Acme' },
+            origineOffre: { urlOrigine: `https://candidat.francetravail.fr/offres/recherche/detail/${i}` },
+        }));
+        mockTokenThenSearch([{ resultats }]);
+
+        const results = await search({ query: 'QA Engineer' });
+        expect(results).toHaveLength(50);
+    });
+});
+
+// SearchPreferences.franceTravailClientId/_ClientSecret, entered in-app (see
+// server/routes.scraper.js's POST /run), take priority over the env vars — see
+// configureCredentials's own doc comment for why.
+describe('configureCredentials (franceTravail)', () => {
+    it('takes priority over the env vars when set', async () => {
+        configureCredentials('override-id', 'override-secret');
+        const fetchMock = mockTokenThenSearch([{ resultats: [] }]);
+        await search({ query: 'QA Engineer' });
+
+        const tokenCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('access_token'));
+        const body = (tokenCall?.[1] as { body?: URLSearchParams })?.body as URLSearchParams;
+        expect(body.get('client_id')).toBe('override-id');
+        expect(body.get('client_secret')).toBe('override-secret');
+    });
+
+    it('falls back to the env vars when called with null/empty (e.g. no in-app credentials saved)', async () => {
+        configureCredentials(null, null);
+        const fetchMock = mockTokenThenSearch([{ resultats: [] }]);
+        await search({ query: 'QA Engineer' });
+
+        const tokenCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('access_token'));
+        const body = (tokenCall?.[1] as { body?: URLSearchParams })?.body as URLSearchParams;
+        expect(body.get('client_id')).toBe('test-id');
+        expect(body.get('client_secret')).toBe('test-secret');
+    });
+
+    it('discards a cached token from before the credentials changed, fetching a fresh one', async () => {
+        const fetchMock = mockTokenThenSearch([{ resultats: [] }, { resultats: [] }]);
+        await search({ query: 'QA Engineer' }); // caches a token under the env-var credentials
+
+        configureCredentials('override-id', 'override-secret');
+        await search({ query: 'QA Engineer' });
+
+        const tokenCalls = fetchMock.mock.calls.filter((c) => (c[0] as string).includes('access_token'));
+        expect(tokenCalls).toHaveLength(2); // not reused from the first call's cache
+        const secondBody = (tokenCalls[1][1] as { body?: URLSearchParams })?.body as URLSearchParams;
+        expect(secondBody.get('client_id')).toBe('override-id');
     });
 });
