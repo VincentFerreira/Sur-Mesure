@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, Radar, Check, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useScraperStore } from '../store/scraperStore';
 import { usePreferencesStore } from '../store/preferencesStore';
 import { useJobsStore } from '../store/jobsStore';
@@ -26,6 +26,7 @@ const STAGE_LABELS: Record<PipelineStage, string> = {
 };
 
 const JobSearchPage: React.FC = () => {
+  const navigate = useNavigate();
   const {
     candidates,
     loading,
@@ -99,10 +100,16 @@ const JobSearchPage: React.FC = () => {
   const closeImport = () => setImporting(null);
 
   // JobForm itself calls onClose() once this resolves — no need to do it here too.
+  // Applying is an explicit intent to apply, not just a lead worth noting — lands in
+  // 'to_apply' (not the JobForm/server default 'lead'), matching the pipeline's own
+  // stage meant for exactly this moment. Navigating straight to the new job's detail
+  // page — rather than leaving the user on Discovery — takes them directly to that
+  // stage and to the application-text actions for continuing the flow.
   const handleSubmit = async (input: CreateJobInput) => {
     if (!importing) return;
-    const job = await addJob(input);
+    const job = await addJob({ ...input, status: 'to_apply' });
     await importCandidate(importing.id, job.id);
+    navigate(`/jobs/${job.id}`);
   };
 
   // Three-step pipeline. All three AI steps now run server-side via the `claude` CLI

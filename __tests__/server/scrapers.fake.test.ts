@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { search, expandKeywords, qualifyAll } from '../../server/scrapers/fake.js';
+import { search, expandKeywords, qualifyAll, generateApplicationText } from '../../server/scrapers/fake.js';
 
 describe('search (fake)', () => {
     it('returns a single deterministic posting referencing the query and location', async () => {
@@ -257,5 +257,25 @@ describe('qualifyAll (fake)', () => {
             const result = await qualifyAll([{ id: '1', title: 'Senior QA Engineer', company: 'Acme' }], ['QA Engineer'], [], undefined);
             expect(result['1'].fit).toBe('high');
         });
+    });
+});
+
+describe('generateApplicationText (fake)', () => {
+    it('returns a non-empty string referencing the job and a CV snippet, for every text type', async () => {
+        for (const textType of ['quick_pitch', 'full_pitch', 'referral_message'] as const) {
+            const text = await generateApplicationText(
+                'QA Engineer', 'Acme', 'desc', 'EXPERIENCE\n- Automated a full regression suite', textType
+            );
+            expect(text.length).toBeGreaterThan(0);
+            expect(text).toContain('QA Engineer');
+            expect(text).toContain('Acme');
+            expect(text).toContain('Automated a full regression suite');
+        }
+    });
+
+    it('varies the output by textType (never returns the exact same string for different types)', async () => {
+        const quick = await generateApplicationText('QA Engineer', 'Acme', 'desc', 'EXPERIENCE\n- X', 'quick_pitch');
+        const referral = await generateApplicationText('QA Engineer', 'Acme', 'desc', 'EXPERIENCE\n- X', 'referral_message');
+        expect(quick).not.toBe(referral);
     });
 });

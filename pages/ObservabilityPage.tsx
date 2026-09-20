@@ -19,6 +19,7 @@ const OPERATION_LABELS: Record<string, string> = {
   expand_keywords: 'Keyword expansion',
   qualify: 'Qualification',
   search_all: 'Web search',
+  generate_application_text: 'Application text',
 };
 
 function formatDuration(ms: number): string {

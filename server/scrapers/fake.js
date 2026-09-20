@@ -149,3 +149,22 @@ export async function qualifyAll(candidates, jobTitles, locations, cvText, workM
     }
     return map;
 }
+
+const APPLICATION_TEXT_LABELS = {
+    quick_pitch: 'Quick pitch',
+    full_pitch: 'Full pitch',
+    referral_message: 'Referral message',
+};
+
+// Deterministic stand-in for claudeCli.js's generateApplicationText — no real prompt
+// grounding (a fake heuristic can't judge genuine CV-to-posting fit), just enough of a
+// real-shaped, non-empty string referencing the job/CV inputs for e2e assertions to
+// check against, mirroring qualifyAll's fake approach above.
+export async function generateApplicationText(jobTitle, company, jobDescription, cvText, textType) {
+    // Prefer an actual `- ` bullet (serializeCVForATS's experience-description lines)
+    // over a bare `== SECTION ==` header, so the snippet is real content, not a label.
+    const lines = (cvText || '').split('\n').map((l) => l.trim()).filter(Boolean);
+    const cvSnippet = lines.find((line) => line.startsWith('- ')) ?? lines[0] ?? '';
+    const label = APPLICATION_TEXT_LABELS[textType] ?? textType;
+    return `[Fake ${label}] Applying for ${jobTitle} at ${company}, drawing on: ${cvSnippet.replace(/^- /, '')}`;
+}

@@ -138,15 +138,26 @@ test('importing a scraped job prefills JobForm, creates a real job, and moves th
   await expect(page.getByTestId('job-description-input')).toHaveValue(candidate.descriptionRaw);
 
   await page.getByTestId('job-form-submit').click();
-  await expect(page.getByTestId('job-form')).not.toBeVisible();
+
+  // Submitting navigates straight to the new job's own detail page — applying is an
+  // explicit intent to act on this job, not something that should leave the user back
+  // on the Discovery list to go find it themselves.
+  await expect(page.getByTestId('job-detail')).toBeVisible();
+  await expect(page.getByTestId('status-select')).toHaveValue('to_apply');
 
   // The candidate moved to Imported instead of staying under New.
+  await page.goto('/job-search');
   await expect(page.getByTestId(`scraped-job-row-${candidate.id}`)).not.toBeVisible();
   await page.getByTestId('scraped-jobs-tab-imported').click();
   await expect(page.getByTestId(`scraped-job-row-${candidate.id}`)).toBeVisible();
 
   await page.goto('/jobs');
-  await expect(page.locator('tr', { hasText: company })).toBeVisible();
+  const jobRow = page.locator('tr', { hasText: company });
+  await expect(jobRow).toBeVisible();
+  // Applying is an explicit intent to apply, not just a lead worth noting — lands in
+  // 'to_apply', not the JobForm/server default 'lead' (see JobSearchPage.tsx's
+  // handleSubmit).
+  await expect(jobRow).toContainText('To apply');
 });
 
 test('an unviewed candidate shows the unseen dot; a viewed one renders under "already seen"', async ({ page, request }) => {

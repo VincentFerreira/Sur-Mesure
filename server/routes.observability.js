@@ -7,7 +7,7 @@ import { insertCall, listCalls, getStats, getCallDetail } from './observabilityS
 // routes.scraper.js: this server runs as plain Node (`node --watch server.js`, no TS
 // loader), so it can't import from a .ts file.
 const AI_CALL_PROVIDERS = ['gemini', 'claude', 'claude_cli', 'fake'];
-const AI_CALL_OPERATIONS = ['parse_cv', 'analyze_ats', 'extract_job', 'expand_keywords', 'qualify', 'search_all'];
+const AI_CALL_OPERATIONS = ['parse_cv', 'analyze_ats', 'extract_job', 'expand_keywords', 'qualify', 'search_all', 'generate_application_text'];
 const AI_CALL_STATUSES = ['success', 'error'];
 
 function errorBody(code, message) {

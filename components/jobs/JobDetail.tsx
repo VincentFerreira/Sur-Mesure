@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Copy, ExternalLink, Loader2, Pencil, RotateCcw, Target, Trash2 } from 'lucide-react';
-import { Job, JOB_STATUSES, JobStatus } from '../../types';
+import { AlertCircle, ArrowLeft, Check, Copy, ExternalLink, Loader2, Pencil, RotateCcw, Sparkles, Target, Trash2 } from 'lucide-react';
+import { ApplicationTextType, Job, JOB_STATUSES, JobStatus } from '../../types';
 import { getJob } from '../../services/jobService';
 import { useJobsStore } from '../../store/jobsStore';
 import { useCvsStore } from '../../store/cvsStore';
@@ -9,11 +9,18 @@ import { ApiError } from '../../services/apiClient';
 import { isJobStale } from '../../lib/jobStale';
 import { ATS_PROMPT_VERSION } from '../../lib/atsConstants';
 import { loadCV, duplicateCV } from '../../services/cvStorageService';
-import { AIProvider, analyzeATS, atsProviderModel } from '../../services/aiService';
+import { AIProvider, analyzeATS, atsProviderModel, serializeCVForATS } from '../../services/aiService';
+import { generateApplicationText } from '../../services/applicationTextService';
 import { STATUS_META } from './statusMeta';
 import JobTimeline from './JobTimeline';
 import JobForm from './JobForm';
 import AtsReport from '../matches/AtsReport';
+
+const APPLICATION_TEXT_OPTIONS: { value: ApplicationTextType; label: string; hint: string }[] = [
+  { value: 'quick_pitch', label: 'Quick pitch', hint: '~100 words — a short-answer field or a cold message opener' },
+  { value: 'full_pitch', label: 'Full pitch', hint: '~300 words — a one-page cover-letter-style pitch' },
+  { value: 'referral_message', label: 'Referral message', hint: '~120 words — to a colleague or contact, asking for a referral' },
+];
 
 const FAKE_PROVIDER_ENABLED = import.meta.env.VITE_ATS_PROVIDER === 'fake';
 const PROVIDERS: { value: AIProvider; label: string }[] = [
@@ -42,6 +49,10 @@ const JobDetail: React.FC<Props> = ({ jobId }) => {
   const [scoreError, setScoreError] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState(false);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
+  const [generatingType, setGeneratingType] = useState<ApplicationTextType | null>(null);
+  const [applicationTexts, setApplicationTexts] = useState<Partial<Record<ApplicationTextType, string>>>({});
+  const [applicationTextErrors, setApplicationTextErrors] = useState<Partial<Record<ApplicationTextType, string>>>({});
+  const [copiedType, setCopiedType] = useState<ApplicationTextType | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -113,6 +124,36 @@ const JobDetail: React.FC<Props> = ({ jobId }) => {
       setScoreError(err instanceof Error ? err.message : 'Unable to compute the score.');
     } finally {
       setScoring(false);
+    }
+  };
+
+  const handleGenerateApplicationText = async (textType: ApplicationTextType) => {
+    if (!job?.cvId) return;
+    setGeneratingType(textType);
+    setApplicationTextErrors((prev) => ({ ...prev, [textType]: undefined }));
+    try {
+      const cvRecord = await loadCV(job.cvId);
+      const cvText = serializeCVForATS(cvRecord.data);
+      const text = await generateApplicationText(job.id, textType, cvText);
+      setApplicationTexts((prev) => ({ ...prev, [textType]: text }));
+    } catch (err) {
+      setApplicationTextErrors((prev) => ({
+        ...prev,
+        [textType]: err instanceof Error ? err.message : 'Unable to generate this text.',
+      }));
+    } finally {
+      setGeneratingType(null);
+    }
+  };
+
+  const handleCopyApplicationText = async (textType: ApplicationTextType, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedType(textType);
+      setTimeout(() => setCopiedType(null), 1500);
+    } catch {
+      // Clipboard API can be unavailable (e.g. insecure context) — the text is still
+      // visible and selectable in the textarea either way, nothing else to do.
     }
   };
 
@@ -226,6 +267,59 @@ const JobDetail: React.FC<Props> = ({ jobId }) => {
             {statusError}
           </div>
         )}
+
+        <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6" data-testid="application-text-section">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Application text</p>
+          {!job.cvId ? (
+            <p className="text-sm text-slate-400">Assign a CV below to generate application text.</p>
+          ) : (
+            <div className="space-y-4">
+              {APPLICATION_TEXT_OPTIONS.map(({ value, label, hint }) => (
+                <div key={value}>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">{label}</p>
+                      <p className="text-xs text-slate-400">{hint}</p>
+                    </div>
+                    <button
+                      onClick={() => handleGenerateApplicationText(value)}
+                      disabled={generatingType !== null}
+                      data-testid={`generate-${value.replace(/_/g, '-')}`}
+                      className="flex items-center gap-1.5 shrink-0 bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                    >
+                      {generatingType === value ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                      {applicationTexts[value] ? 'Regenerate' : 'Generate'}
+                    </button>
+                  </div>
+
+                  {applicationTextErrors[value] && (
+                    <p className="text-red-600 text-xs mt-2">{applicationTextErrors[value]}</p>
+                  )}
+
+                  {applicationTexts[value] && (
+                    <div className="mt-2">
+                      <textarea
+                        value={applicationTexts[value]}
+                        onChange={(e) => setApplicationTexts((prev) => ({ ...prev, [value]: e.target.value }))}
+                        data-testid={`application-text-result-${value.replace(/_/g, '-')}`}
+                        rows={value === 'full_pitch' ? 10 : 5}
+                        className="w-full text-sm text-slate-700 border border-slate-200 rounded-lg p-3 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                      />
+                      <button
+                        onClick={() => handleCopyApplicationText(value, applicationTexts[value]!)}
+                        data-testid={`application-text-copy-${value.replace(/_/g, '-')}`}
+                        className="flex items-center gap-1.5 mt-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+                      >
+                        {copiedType === value ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedType === value ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">CV sent</p>

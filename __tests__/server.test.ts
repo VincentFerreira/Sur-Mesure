@@ -524,4 +524,50 @@ describe('Jobs API', () => {
       expect(res.status).toBe(404);
     });
   });
+
+  describe('POST /api/jobs/:id/generate-application-text', () => {
+    let jobId: string;
+
+    beforeAll(async () => {
+      const res = await request(app)
+        .post('/api/jobs')
+        .send({ company: 'Pitch Co', title: 'Dev', descriptionRaw: 'Looking for a React developer' });
+      jobId = res.body.id;
+      jobIdsToClean.push(jobId);
+    });
+
+    // NODE_ENV=test (set by vitest) makes routes.jobs.js's useFakeAi() true, so this
+    // hits server/scrapers/fake.js's generateApplicationText — no real CLI call.
+    it('returns generated text for each valid textType', async () => {
+      for (const textType of ['quick_pitch', 'full_pitch', 'referral_message']) {
+        const res = await request(app)
+          .post(`/api/jobs/${jobId}/generate-application-text`)
+          .send({ textType, cvText: 'EXPERIENCE\n- Built a React app used by 10k users' });
+        expect(res.status).toBe(200);
+        expect(typeof res.body.text).toBe('string');
+        expect(res.body.text.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('returns 400 for an invalid textType', async () => {
+      const res = await request(app)
+        .post(`/api/jobs/${jobId}/generate-application-text`)
+        .send({ textType: 'not_a_real_type', cvText: 'some cv text' });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 when cvText is missing or empty', async () => {
+      const res = await request(app)
+        .post(`/api/jobs/${jobId}/generate-application-text`)
+        .send({ textType: 'quick_pitch', cvText: '' });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 for an unknown job', async () => {
+      const res = await request(app)
+        .post('/api/jobs/00000000-0000-0000-0000-000000000000/generate-application-text')
+        .send({ textType: 'quick_pitch', cvText: 'some cv text' });
+      expect(res.status).toBe(404);
+    });
+  });
 });

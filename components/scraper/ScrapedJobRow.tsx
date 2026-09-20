@@ -61,7 +61,7 @@ const ScrapedJobRow: React.FC<Props> = ({ candidate, unseen, onImport, onDismiss
             data-testid={`import-scraped-job-${candidate.id}`}
             className="text-xs font-semibold text-indigo-600 border border-indigo-200 rounded-md px-3 py-1.5 hover:bg-indigo-50"
           >
-            Import
+            Apply
           </button>
           <button
             onClick={() => onDismiss(candidate)}

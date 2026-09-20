@@ -199,6 +199,13 @@ export interface Job {
   updatedAt: string; // ISO
 }
 
+// AI-generated application text types (server/scrapers/claudeCli.js's
+// generateApplicationText) — duplicated as a plain array in server/routes.jobs.js
+// (plain Node, no TS loader) rather than imported, same convention as
+// SCRAPER_PORTAL_IDS below.
+export const APPLICATION_TEXT_TYPES = ['quick_pitch', 'full_pitch', 'referral_message'] as const;
+export type ApplicationTextType = (typeof APPLICATION_TEXT_TYPES)[number];
+
 // Scraper portal/source ids — mirrors server/scrapers/index.js's registry
 // (france_travail/arbeitnow/freehire as buildRegistry() portals, claude_cli as the
 // single-shot searchAll portal). Duplicated as a plain array in
@@ -336,7 +343,7 @@ export interface ScraperProgress {
 export const AI_CALL_PROVIDERS = ['gemini', 'claude', 'claude_cli', 'fake'] as const;
 export type AiCallProvider = (typeof AI_CALL_PROVIDERS)[number];
 
-export const AI_CALL_OPERATIONS = ['parse_cv', 'analyze_ats', 'extract_job', 'expand_keywords', 'qualify', 'search_all'] as const;
+export const AI_CALL_OPERATIONS = ['parse_cv', 'analyze_ats', 'extract_job', 'expand_keywords', 'qualify', 'search_all', 'generate_application_text'] as const;
 export type AiCallOperation = (typeof AI_CALL_OPERATIONS)[number];
 
 export const AI_CALL_STATUSES = ['success', 'error'] as const;

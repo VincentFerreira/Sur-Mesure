@@ -30,7 +30,7 @@ vi.mock('child_process', () => ({
     spawn: (...args: unknown[]) => mockSpawn(...args),
 }));
 
-const { searchAll, expandKeywords, qualifyAll, configureObservability } = await import('../../server/scrapers/claudeCli.js');
+const { searchAll, expandKeywords, qualifyAll, generateApplicationText, configureObservability } = await import('../../server/scrapers/claudeCli.js');
 
 function cliJsonResult(result: string, overrides: Record<string, unknown> = {}) {
     return JSON.stringify({ is_error: false, subtype: 'success', result, ...overrides });
@@ -480,6 +480,39 @@ describe('qualifyAll (claudeCli)', () => {
         expect(mockExecFile).toHaveBeenCalledTimes(2);
         for (const c of batch1) expect(result[c.id].fit).toBe('high');
         for (const c of batch2) expect(result[c.id]).toBeUndefined();
+    });
+});
+
+describe('generateApplicationText (claudeCli)', () => {
+    it('invokes claude with no tools loaded and returns the trimmed prose result', async () => {
+        mockExecFile.mockResolvedValue({ stdout: cliJsonResult('  Some generated pitch text.  \n') });
+        const text = await generateApplicationText(
+            'QA Engineer', 'Acme', 'We need a QA engineer.', 'EXPERIENCE\n- Automated tests', 'quick_pitch'
+        );
+        expect(text).toBe('Some generated pitch text.');
+        const [, args] = mockExecFile.mock.calls[0];
+        const toolsIndex = args.indexOf('--tools');
+        expect(args[toolsIndex + 1]).toBe('');
+        expect(args).not.toContain('--allowedTools');
+        expect(args).not.toContain('--max-budget-usd');
+    });
+
+    it('includes the CV text and job description in the prompt sent to the CLI', async () => {
+        mockExecFile.mockResolvedValue({ stdout: cliJsonResult('pitch') });
+        await generateApplicationText('QA Engineer', 'Acme', 'A great QA role.', 'EXPERIENCE\n- Built a test suite', 'full_pitch');
+        const [, args] = mockExecFile.mock.calls[0];
+        const promptIndex = args.indexOf('-p');
+        const prompt = args[promptIndex + 1];
+        expect(prompt).toContain('A great QA role.');
+        expect(prompt).toContain('Built a test suite');
+        expect(prompt).toContain('full pitch');
+    });
+
+    it('propagates the error instead of falling back to a default (no sensible default text exists)', async () => {
+        mockExecFile.mockRejectedValue(new Error('spawn claude ENOENT'));
+        await expect(
+            generateApplicationText('QA Engineer', 'Acme', 'desc', 'cv text', 'referral_message')
+        ).rejects.toThrow('claude CLI invocation failed');
     });
 });
 

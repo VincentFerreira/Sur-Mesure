@@ -3,11 +3,17 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { listJsonFiles, readJson, writeJsonAtomic, deleteJson, ensureDir } from './store.js';
 import { sha256Json } from './hash.js';
+import * as claudeCli from './scrapers/claudeCli.js';
+import * as fake from './scrapers/fake.js';
 
 const isValidId = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id);
+const useFakeAi = () => process.env.NODE_ENV === 'test' || process.env.SCRAPER_PROVIDER === 'fake';
 
 const JOB_STATUSES = ['lead', 'to_apply', 'applied', 'screening', 'interview', 'offer', 'rejected', 'archived'];
 const EVENT_TYPES = ['status_change', 'note', 'follow_up', 'interview', 'match_submitted'];
+// Mirrors types.ts's APPLICATION_TEXT_TYPES — duplicated rather than imported (plain
+// Node, no TS loader), same convention as JOB_STATUSES above.
+const APPLICATION_TEXT_TYPES = ['quick_pitch', 'full_pitch', 'referral_message'];
 
 function errorBody(code, message) {
     return { error: { code, message } };
@@ -247,5 +253,58 @@ export function createJobsRouter({ jobsDir, cvsDir }) {
         }
     });
 
+    // AI-generated application text (quick pitch / full pitch / referral message) via
+    // the `claude` CLI (server/scrapers/claudeCli.js) — same mechanism as job-search
+    // qualification, no separate billed API key. Body: { textType, cvText }. cvText is
+    // computed client-side (loadCV + serializeCVForATS, mirroring handleComputeScore
+    // and handleRunSearch) rather than the server re-reading CV storage itself — job
+    // title/company/description and any existing ATS result are read straight off the
+    // already-stored job record. Response: { text }.
+    router.post('/:id/generate-application-text', async (req, res) => {
+        const { id } = req.params;
+        if (!isValidId(id)) return res.status(400).json(errorBody('invalid_id', 'Invalid ID'));
+
+        const { textType, cvText } = req.body ?? {};
+        if (!APPLICATION_TEXT_TYPES.includes(textType)) {
+            return res.status(400).json(errorBody('invalid_text_type', `textType must be one of: ${APPLICATION_TEXT_TYPES.join(', ')}`));
+        }
+        if (typeof cvText !== 'string' || cvText.trim().length === 0) {
+            return res.status(400).json(errorBody('invalid_body', 'cvText is required'));
+        }
+
+        let job;
+        try {
+            job = await readJson(path.join(jobsDir, `${id}.json`));
+        } catch {
+            return res.status(404).json(errorBody('not_found', 'Job not found'));
+        }
+
+        const atsContext = buildAtsContext(job.ats);
+        try {
+            const text = useFakeAi()
+                ? await fake.generateApplicationText(job.title, job.company, job.descriptionRaw, cvText, textType)
+                : await claudeCli.generateApplicationText(job.title, job.company, job.descriptionRaw, cvText, textType, atsContext);
+            res.json({ text });
+        } catch (err) {
+            res.status(500).json(errorBody('internal_error', err.message));
+        }
+    });
+
     return router;
+}
+
+// Condensed digest of an already-computed ATS result, passed as extra grounding to
+// generateApplicationText — not required (undefined when the job has no `ats` yet, or
+// its analysis is missing keyword arrays), the prompt works from cvText/descriptionRaw
+// alone in that case.
+function buildAtsContext(ats) {
+    const analysis = ats?.analysis;
+    if (!analysis) return undefined;
+    const matched = [...(analysis.criticalKeywords ?? []), ...(analysis.importantKeywords ?? [])]
+        .filter((k) => k.status === 'present' || k.status === 'partial')
+        .map((k) => k.keyword);
+    const parts = [];
+    if (matched.length > 0) parts.push(`Matched keywords: ${matched.join(', ')}`);
+    if (analysis.summary) parts.push(`ATS summary: ${analysis.summary}`);
+    return parts.length > 0 ? parts.join('\n') : undefined;
 }

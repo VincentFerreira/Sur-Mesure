@@ -621,3 +621,43 @@ export async function qualifyAll(candidates, jobTitles, locations, cvText, workM
     }
     return qualifyMap;
 }
+
+// ─── Application text generation ──────────────────────────────────────────────────
+
+// Three distinct genres, not one generic "cover letter" scaled to different lengths —
+// a referral ask reads as a sales pitch (and gets ignored) if it's just a short cover
+// letter, and a cover letter that's too terse reads as low-effort. Target lengths and
+// structure are based on outside research on what each genre actually converts on.
+const APPLICATION_TEXT_INSTRUCTIONS = {
+    quick_pitch: `Write a "quick pitch": a confident, specific 80-120 word paragraph a job seeker could paste into a short-answer application field or use as a cold outreach opener. Lead with the strongest match, not a generic intro. No greeting, no sign-off — just the paragraph.`,
+    full_pitch: `Write a "full pitch": a 250-350 word, one-page cover-letter-style pitch. Structure: one sentence hook naming the role and the single strongest reason this candidate fits, then 2-3 short paragraphs each tying one specific piece of the candidate's real experience to something the posting explicitly asks for, then a brief close. No placeholder greeting like "Dear Hiring Manager" and no sign-off — just the body text.`,
+    referral_message: `Write a "referral message": an 80-150 word message the candidate would send to a colleague or contact at the company, asking for a referral or insight — NOT a cover letter and NOT a sales pitch. Casual, respectful tone. Structure: who the candidate is in one line, name the role, give exactly 2 concrete reasons they're a fit, end with ONE specific, low-pressure ask (e.g. "would you be open to referring me, or happy to share what the process is like?"). Never mention attaching or sending a resume. No greeting/sign-off — just the message body.`,
+};
+
+function buildApplicationTextPrompt(jobTitle, company, jobDescription, cvText, textType, atsContext) {
+    const instructions = APPLICATION_TEXT_INSTRUCTIONS[textType];
+    return `You write job-application texts for a job seeker, grounded strictly in their real CV — never invent experience, skills, or achievements that aren't in the CV text below. Every claim of fit must cite something concretely present in the CV (a real project, technology, role, or measurable result), not a generic restatement of the job posting's own words.
+
+${instructions}
+
+== TARGET JOB ==
+Title: ${jobTitle}
+Company: ${company}
+Description: ${jobDescription}
+${atsContext ? `\n== KNOWN STRONG MATCHES (from a prior ATS scoring pass — use as a starting point, not the only source) ==\n${atsContext}\n` : ''}
+== CANDIDATE'S CV ==
+${cvText}
+
+Return ONLY the requested text, no markdown, no preamble, no explanation of what you wrote.`;
+}
+
+// No tools, no budget flag — a single non-agentic text completion, same shape as
+// expandKeywords/qualifyBatch above. Deliberately does NOT catch/fall back on error
+// (unlike expandKeywords degrading to the original titles) — there's no sensible
+// default application text, so a failure must surface to the route and the UI as a
+// real error instead of silently returning something misleading.
+export async function generateApplicationText(jobTitle, company, jobDescription, cvText, textType, atsContext) {
+    const prompt = buildApplicationTextPrompt(jobTitle, company, jobDescription, cvText, textType, atsContext);
+    const text = await runClaude(prompt, '', 'generate_application_text', { textType });
+    return text.trim();
+}
