@@ -20,6 +20,7 @@ const OPERATION_LABELS: Record<string, string> = {
   qualify: 'Qualification',
   search_all: 'Web search',
   generate_application_text: 'Application text',
+  evaluate_experience_matches: 'Experience match insights',
 };
 
 function formatDuration(ms: number): string {

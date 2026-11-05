@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { search, expandKeywords, qualifyAll, generateApplicationText } from '../../server/scrapers/fake.js';
+import { search, expandKeywords, qualifyAll, generateApplicationText, evaluateExperienceMatches } from '../../server/scrapers/fake.js';
 
 describe('search (fake)', () => {
     it('returns a single deterministic posting referencing the query and location', async () => {
@@ -277,5 +277,26 @@ describe('generateApplicationText (fake)', () => {
         const quick = await generateApplicationText('QA Engineer', 'Acme', 'desc', 'EXPERIENCE\n- X', 'quick_pitch');
         const referral = await generateApplicationText('QA Engineer', 'Acme', 'desc', 'EXPERIENCE\n- X', 'referral_message');
         expect(quick).not.toBe(referral);
+    });
+});
+
+describe('evaluateExperienceMatches (fake)', () => {
+    it('returns up to 2 real CV bullets as items, each with a job-referencing reason', async () => {
+        const items = await evaluateExperienceMatches(
+            'QA Engineer', 'Acme', 'desc',
+            'EXPERIENCE\n- Automated a full regression suite\n- Led a team of 3 QA engineers\n- Onboarded new hires'
+        );
+        expect(items).toHaveLength(2);
+        expect(items[0].experience).toBe('Automated a full regression suite');
+        expect(items[1].experience).toBe('Led a team of 3 QA engineers');
+        for (const item of items) {
+            expect(item.reason).toContain('QA Engineer');
+            expect(item.reason).toContain('Acme');
+        }
+    });
+
+    it('returns an empty list when the CV has no bullet lines', async () => {
+        const items = await evaluateExperienceMatches('QA Engineer', 'Acme', 'desc', 'No bullets here.');
+        expect(items).toEqual([]);
     });
 });

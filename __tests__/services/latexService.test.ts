@@ -44,8 +44,7 @@ const makeCV = (overrides: Partial<CVData> = {}): CVData => ({
       degree: { fr: 'Licence Informatique', en: 'BSc Computer Science' },
       school: 'Université Paris',
       location: 'France',
-      startDate: '2018',
-      endDate: '2021',
+      year: '2021',
       description: { fr: 'Option IA', en: 'AI option' },
     },
   ],
@@ -86,6 +85,31 @@ describe('generateLatex — document structure', () => {
 // ── Content ───────────────────────────────────────────────────────────────────
 
 describe('generateLatex — content', () => {
+  it('renders *words* in experience bullets as \\textbf, escaping their content', () => {
+    const base = makeCV();
+    const latex = generateLatex(makeCV({
+      experience: [{ ...base.experience[0], description: { fr: ['Réduit les bugs de *40 %* grâce à *R&D*'] } }],
+    }));
+    expect(latex).toContain('\\item Réduit les bugs de \\textbf{40 \\%} grâce à \\textbf{R\\&D}');
+    expect(latex).not.toContain('*40');
+  });
+
+  it('renders the availability line right after the title, in the current language', () => {
+    const base = makeCV();
+    const latex = generateLatex(makeCV({
+      personalInfo: { ...base.personalInfo, availability: { fr: 'Disponibilité immédiate', en: 'Available immediately' } },
+    }));
+    expect(latex).toContain('\\faCalendarCheck[regular]\\;Disponibilité immédiate');
+    expect(latex).not.toContain('Available immediately');
+    expect(latex.indexOf('Disponibilité immédiate')).toBeGreaterThan(latex.indexOf('Développeur Full Stack'));
+  });
+
+  it('omits the availability line when the field is absent', () => {
+    const latex = generateLatex(makeCV());
+    expect(latex).not.toContain('\\faCalendarCheck');
+    expect(latex).toContain('{\\large\\color{accent}Développeur Full Stack\\par}');
+  });
+
   it('includes the first and last name', () => {
     const latex = generateLatex(makeCV());
     expect(latex).toContain('Jean');
@@ -134,11 +158,24 @@ describe('generateLatex — content', () => {
 // ── Language switching ────────────────────────────────────────────────────────
 
 describe('generateLatex — language switching', () => {
+  it('merges certifications into the education section, listed before degrees (single FORMATION heading)', () => {
+    const latex = generateLatex(makeCV({ currentLanguage: 'fr' }));
+    expect(latex).toContain('\\cvsection{Formation}');
+    expect(latex).not.toMatch(/\\cvsection\{Certifications\}/);
+    const educationAt = latex.indexOf('\\cvsection{Formation}');
+    const languagesAt = latex.indexOf('\\cvsection{Langues}');
+    const certAt = latex.indexOf('AWS Certified Solutions Architect');
+    const degreeAt = latex.indexOf('Licence Informatique');
+    expect(certAt).toBeGreaterThan(educationAt);
+    expect(certAt).toBeLessThan(degreeAt);
+    expect(degreeAt).toBeLessThan(languagesAt);
+  });
+
   it('uses French section headers when currentLanguage is fr', () => {
     const latex = generateLatex(makeCV({ currentLanguage: 'fr' }));
     expect(latex).toContain('Compétences');
     expect(latex).toContain('Expérience');
-    expect(latex).toContain('Éducation');
+    expect(latex).toContain('Formation');
     expect(latex).toContain('Langues');
   });
 
@@ -227,16 +264,18 @@ describe('generateLatex — LaTeX special-character escaping', () => {
 // ── Photo handling ────────────────────────────────────────────────────────────
 
 describe('generateLatex — photo', () => {
-  it('uses full-width minipage when no photo is set', () => {
+  it('uses the full line width for the header text when no photo is set', () => {
     const latex = generateLatex(makeCV());
-    expect(latex).toContain('\\begin{minipage}{\\textwidth}');
+    expect(latex).toContain('\\setlength{\\headertextwidth}{\\linewidth}');
+    expect(latex).not.toContain('\\includegraphics');
   });
 
   it('uses split minipages when a valid JPEG photo is provided', () => {
     const cv = makeCV();
     cv.personalInfo.photo = 'data:image/jpeg;base64,/9j/abc123';
     const latex = generateLatex(cv);
-    expect(latex).toContain('0.22\\textwidth');
+    expect(latex).toContain('\\setlength{\\headertextwidth}{\\dimexpr\\linewidth-\\headerphotomaxwidth-\\headergap\\relax}');
+    expect(latex).toContain('\\includegraphics');
     expect(latex).toContain('photo.jpg');
   });
 
@@ -247,11 +286,12 @@ describe('generateLatex — photo', () => {
     expect(latex).toContain('photo.png');
   });
 
-  it('falls back to full-width minipage for an invalid data URL', () => {
+  it('falls back to the full-width header for an invalid data URL', () => {
     const cv = makeCV();
     cv.personalInfo.photo = 'https://picsum.photos/200/200';
     const latex = generateLatex(cv);
-    expect(latex).toContain('\\begin{minipage}{\\textwidth}');
+    expect(latex).toContain('\\setlength{\\headertextwidth}{\\linewidth}');
+    expect(latex).not.toContain('\\includegraphics');
   });
 });
 
@@ -329,15 +369,15 @@ describe('generateLatex — missing optional fields', () => {
     const cv = makeCV();
     cv.personalInfo.location = '';
     const latex = generateLatex(cv);
-    expect(latex).toContain('\\faMapMarker*');
-    expect(latex).not.toContain('{Paris, France}');
+    // Empty contact fields are skipped entirely: no orphan icon.
+    expect(latex).not.toContain('\\faMapMarker*');
   });
 
   it('renders correctly when medium is empty', () => {
     const cv = makeCV();
     cv.personalInfo.medium = '';
     const latex = generateLatex(cv);
-    expect(latex).toContain('\\faMedium');
+    expect(latex).not.toContain('\\faMedium');
   });
 });
 

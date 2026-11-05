@@ -1,7 +1,8 @@
 import React from 'react';
 import { CVData } from '../types';
 import { getLangText, getLangArray, UI_TRANSLATIONS, LANGUAGES } from '../lib/i18n';
-import { MapPin, Mail, PenLine } from 'lucide-react';
+import { splitBold } from '../lib/inlineBold';
+import { MapPin, Mail, PenLine, Phone } from 'lucide-react';
 
 // lucide-react dropped brand/logo icons in v1; inlined here instead.
 const Linkedin: React.FC<{ className?: string }> = ({ className }) => (
@@ -56,12 +57,22 @@ const Preview: React.FC<PreviewProps> = ({ data }) => {
           <h2 className="text-xl text-indigo-600 font-medium mt-1 mb-3">
             {getLangText(personalInfo.title, lang)}
           </h2>
+          {getLangText(personalInfo.availability, lang) && (
+            <div className="text-sm font-semibold text-indigo-800 -mt-2 mb-3">
+              {getLangText(personalInfo.availability, lang)}
+            </div>
+          )}
 
           <div className="text-sm text-slate-600 space-y-1">
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4" /> <span>{personalInfo.location}</span>
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {personalInfo.phone && (
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4" /> <span>{personalInfo.phone}</span>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4" /> <span>{personalInfo.email}</span>
               </div>
@@ -129,7 +140,11 @@ const Preview: React.FC<PreviewProps> = ({ data }) => {
                 </div>
                 <ul className="list-disc list-outside ml-4 mt-2 text-sm text-slate-600 space-y-1">
                   {getLangArray(exp.description, lang).map((desc, idx) => (
-                    <li key={idx}>{desc}</li>
+                    <li key={idx}>
+                      {splitBold(desc).map((seg, i) =>
+                        seg.bold ? <strong key={i} className="text-slate-800">{seg.text}</strong> : <React.Fragment key={i}>{seg.text}</React.Fragment>
+                      )}
+                    </li>
                   ))}
                 </ul>
                 {exp.techStack && (
@@ -148,40 +163,12 @@ const Preview: React.FC<PreviewProps> = ({ data }) => {
         </div>
       </div>
 
-      {/* EDUCATION */}
+      {/* EDUCATION (certifications, then degrees) */}
       <div className="mb-8">
         <h3 className="text-xl font-bold text-indigo-800 border-b-2 border-indigo-800 mb-4 flex items-center gap-2">
           <span className="text-2xl">🎓</span> {h.previewEducation}
         </h3>
         <div className="space-y-4">
-          {education.map((edu) => (
-            <div key={edu.id} className="flex flex-col sm:flex-row">
-              <div className="w-full sm:w-40 flex flex-col items-end pr-4 mb-2 sm:mb-0">
-                <span className="font-bold text-slate-800 text-sm">{edu.startDate}</span>
-                <span className="text-xs text-slate-500">{edu.endDate}</span>
-              </div>
-              <div className="flex-1 border-l-2 border-slate-200 pl-4">
-                <div className="font-bold text-base text-slate-800">
-                  {getLangText(edu.degree, lang)}
-                </div>
-                <div className="text-sm text-slate-600 italic mb-1">
-                  {edu.school}, {edu.location}
-                </div>
-                <div className="text-sm text-slate-500">
-                  {getLangText(edu.description, lang)}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* CERTIFICATIONS */}
-      <div className="mb-8">
-        <h3 className="text-xl font-bold text-indigo-800 border-b-2 border-indigo-800 mb-4 flex items-center gap-2">
-          <span className="text-2xl">📜</span> {h.previewCertifications}
-        </h3>
-        <div className="space-y-2">
           {certifications.map((cert) => (
             <div key={cert.id} className="flex flex-col sm:flex-row">
               <div className="w-full sm:w-40 flex flex-col items-end pr-4 mb-2 sm:mb-0">
@@ -193,6 +180,24 @@ const Preview: React.FC<PreviewProps> = ({ data }) => {
                 </div>
                 <div className="text-sm text-slate-600 italic">
                   {cert.issuer}
+                </div>
+              </div>
+            </div>
+          ))}
+          {education.map((edu) => (
+            <div key={edu.id} className="flex flex-col sm:flex-row">
+              <div className="w-full sm:w-40 flex flex-col items-end pr-4 mb-2 sm:mb-0">
+                <span className="font-bold text-slate-800 text-sm">{edu.year}</span>
+              </div>
+              <div className="flex-1 border-l-2 border-slate-200 pl-4">
+                <div className="font-bold text-base text-slate-800">
+                  {getLangText(edu.degree, lang)}
+                </div>
+                <div className="text-sm text-slate-600 italic mb-1">
+                  {edu.school}, {edu.location}
+                </div>
+                <div className="text-sm text-slate-500">
+                  {getLangText(edu.description, lang)}
                 </div>
               </div>
             </div>

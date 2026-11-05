@@ -13,6 +13,7 @@ import { CreateJobInput } from '../services/jobService';
 import { expandSearchKeywords, qualifyScrapedJobs } from '../services/scraperService';
 import { serializeCVForATS } from '../services/aiService';
 import { loadCV } from '../services/cvStorageService';
+import { triggerExperienceInsights } from '../services/applicationTextService';
 
 const TABS: ScrapedJobStatus[] = ['new', 'dismissed', 'imported'];
 const TAB_LABELS: Record<ScrapedJobStatus, string> = { new: 'New', dismissed: 'Dismissed', imported: 'Imported' };
@@ -109,6 +110,21 @@ const JobSearchPage: React.FC = () => {
     if (!importing) return;
     const job = await addJob({ ...input, status: 'to_apply' });
     await importCandidate(importing.id, job.id);
+
+    // Auto-kick-off experience-match insights when a search CV is configured — awaited
+    // (it only waits for the job to be marked 'pending', fast) so the detail page's
+    // first render already shows that state instead of a flash of nothing. Best-effort:
+    // never blocks the navigation below if it fails (e.g. claude CLI unavailable) —
+    // the detail page just won't show the insights section for this job.
+    if (preferences?.cvId) {
+      try {
+        const cvRecord = await loadCV(preferences.cvId);
+        await triggerExperienceInsights(job.id, serializeCVForATS(cvRecord.data));
+      } catch (err) {
+        console.error('Could not start experience-match insights for this job.', err);
+      }
+    }
+
     navigate(`/jobs/${job.id}`);
   };
 

@@ -46,8 +46,7 @@
       "school": "École Polytechnique Fédérale",
       "degree": { "fr": "Doctorat ès Sciences", "en": "PhD in Sciences" },
       "location": "Lausanne, Suisse",
-      "startDate": "2015",
-      "endDate": "2019",
+      "year": "2019",
       "description": { "fr": "Thèse sur la théorie des systèmes répartis", "en": "Thesis on distributed systems theory" }
     }
   ],

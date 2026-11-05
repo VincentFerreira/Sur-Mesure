@@ -139,8 +139,7 @@ export const INITIAL_CV_DATA: CVData = {
       },
       school: "Université de Bordeaux",
       location: "France",
-      startDate: "2007",
-      endDate: "2008",
+      year: "2008",
       description: {
         fr: "Spécialité Génie Logiciel",
         en: "Software Engineering Specialization"

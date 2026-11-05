@@ -63,6 +63,19 @@ const JobDetail: React.FC<Props> = ({ jobId }) => {
       .finally(() => setLoading(false));
   }, [jobId]);
 
+  // Polls this one job while its background experience-insights task is pending —
+  // status lives on the persisted job record (server/routes.jobs.js's
+  // POST /:id/evaluate-experience-matches), not component state, so navigating away
+  // and back or reloading still shows the correct current state even without this
+  // effect having run the whole time; this just keeps the open page live-updating.
+  useEffect(() => {
+    if (job?.experienceInsights?.status !== 'pending') return;
+    const interval = setInterval(() => {
+      getJob(jobId).then(setJob).catch(() => {});
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [jobId, job?.experienceInsights?.status]);
+
   useEffect(() => {
     if (cvs.length === 0) fetchCvs();
   }, [cvs.length, fetchCvs]);
@@ -265,6 +278,33 @@ const JobDetail: React.FC<Props> = ({ jobId }) => {
           <div className="flex items-start gap-2 text-amber-700 text-sm bg-amber-50 rounded-lg px-4 py-3 mb-4" data-testid="status-error">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             {statusError}
+          </div>
+        )}
+
+        {job.experienceInsights && (
+          <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6" data-testid="experience-insights-section">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Experience matches</p>
+            {job.experienceInsights.status === 'pending' && (
+              <p className="flex items-center gap-1.5 text-sm text-slate-400" data-testid="experience-insights-pending">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Claude is evaluating your best matches for this job…
+              </p>
+            )}
+            {job.experienceInsights.status === 'error' && (
+              <p className="text-sm text-slate-400" data-testid="experience-insights-error">
+                Couldn&apos;t evaluate experience matches for this job.
+              </p>
+            )}
+            {job.experienceInsights.status === 'done' && (
+              <ul className="space-y-2.5" data-testid="experience-insights-list">
+                {(job.experienceInsights.items ?? []).map((item, i) => (
+                  <li key={i} data-testid="experience-insights-item">
+                    <p className="text-sm text-slate-700 font-medium">{item.experience}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{item.reason}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 

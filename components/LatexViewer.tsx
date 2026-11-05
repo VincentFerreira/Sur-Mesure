@@ -30,6 +30,9 @@ const LatexViewer: React.FC<LatexViewerProps> = ({ data }) => {
   const [templateCode, setTemplateCode] = useState(() => getTemplate());
   const [hasCustomTemplate, setHasCustomTemplate] = useState(() => loadLatexTemplate() !== null);
   const [templateSaved, setTemplateSaved] = useState(false);
+  // Bumped when the stored template changes (save/reset) so the generated
+  // LaTeX is rebuilt from it — data and font changes alone don't cover that.
+  const [templateVersion, setTemplateVersion] = useState(0);
 
   const autoLatexRef = useRef(initLatex);
   const prevUrlRef = useRef<string | null>(null);
@@ -66,7 +69,7 @@ const LatexViewer: React.FC<LatexViewerProps> = ({ data }) => {
     autoLatexRef.current = latex;
     setPhotoData(pd ?? null);
     if (!isModified) setLatexCode(latex);
-  }, [data, fontId, isModified]);
+  }, [data, fontId, isModified, templateVersion]);
 
   // Debounced compile on every code/photo change (skip first render — handled above)
   useEffect(() => {
@@ -96,6 +99,7 @@ const LatexViewer: React.FC<LatexViewerProps> = ({ data }) => {
   const handleSaveTemplate = () => {
     saveLatexTemplate(templateCode);
     setHasCustomTemplate(true);
+    setTemplateVersion(v => v + 1);
     setTemplateSaved(true);
     setTimeout(() => setTemplateSaved(false), 2000);
   };
@@ -104,6 +108,7 @@ const LatexViewer: React.FC<LatexViewerProps> = ({ data }) => {
     resetLatexTemplate();
     setHasCustomTemplate(false);
     setTemplateCode(getTemplate());
+    setTemplateVersion(v => v + 1);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

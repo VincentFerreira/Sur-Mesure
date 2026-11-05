@@ -11,7 +11,9 @@ export interface CVData {
     firstName: string;
     lastName: string;
     title: MultiLangString;
+    availability?: MultiLangString;
     email: string;
+    phone?: string;
     medium: string;
     location: string;
     linkedin: string;
@@ -48,8 +50,7 @@ export interface EducationItem {
   school: string;
   degree: MultiLangString;
   location: string;
-  startDate: string;
-  endDate: string;
+  year: string;
   description: MultiLangString;
 }
 
@@ -187,6 +188,17 @@ export interface Job {
   cvContentHash?: string;
   ats?: AtsResult;
   atsComputedAt?: string;
+  // Auto-triggered by the Discovery "Apply" flow when a search CV is configured (see
+  // JobSearchPage.tsx's handleSubmit) — a background claude-CLI call picking the CV's
+  // experiences/achievements that best match this specific posting. Absent entirely
+  // when never triggered (e.g. no CV was set at apply-time), not an empty/pending state.
+  experienceInsights?: {
+    status: 'pending' | 'done' | 'error';
+    items?: { experience: string; reason: string }[];
+    errorMessage?: string;
+    startedAt: string;
+    completedAt?: string;
+  };
   submitted: boolean;
   submittedAt?: string;
   exportedPdfPath?: string;
@@ -343,7 +355,7 @@ export interface ScraperProgress {
 export const AI_CALL_PROVIDERS = ['gemini', 'claude', 'claude_cli', 'fake'] as const;
 export type AiCallProvider = (typeof AI_CALL_PROVIDERS)[number];
 
-export const AI_CALL_OPERATIONS = ['parse_cv', 'analyze_ats', 'extract_job', 'expand_keywords', 'qualify', 'search_all', 'generate_application_text'] as const;
+export const AI_CALL_OPERATIONS = ['parse_cv', 'analyze_ats', 'extract_job', 'expand_keywords', 'qualify', 'search_all', 'generate_application_text', 'evaluate_experience_matches'] as const;
 export type AiCallOperation = (typeof AI_CALL_OPERATIONS)[number];
 
 export const AI_CALL_STATUSES = ['success', 'error'] as const;

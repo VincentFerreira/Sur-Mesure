@@ -290,7 +290,67 @@ export function createJobsRouter({ jobsDir, cvsDir }) {
         }
     });
 
+    // Auto-triggered by the Discovery "Apply" flow (JobSearchPage.tsx's handleSubmit)
+    // right after creating the job, when a search CV is configured — NOT a manual
+    // button. Body: { cvText }. Responds immediately with the job marked 'pending';
+    // the actual claude CLI call runs after the response is sent (not awaited here) and
+    // writes its result back onto the job record once done, which the client picks up
+    // via polling GET /:id. Every write below re-reads the job fresh and merges only
+    // the `experienceInsights` key — never the full record — so a concurrent PATCH
+    // (status/notes/etc.) landing while this background call is in flight isn't
+    // reverted by a stale read-modify-write.
+    router.post('/:id/evaluate-experience-matches', async (req, res) => {
+        const { id } = req.params;
+        if (!isValidId(id)) return res.status(400).json(errorBody('invalid_id', 'Invalid ID'));
+
+        const { cvText } = req.body ?? {};
+        if (typeof cvText !== 'string' || cvText.trim().length === 0) {
+            return res.status(400).json(errorBody('invalid_body', 'cvText is required'));
+        }
+
+        const filePath = path.join(jobsDir, `${id}.json`);
+        let job;
+        try {
+            job = await readJson(filePath);
+        } catch {
+            return res.status(404).json(errorBody('not_found', 'Job not found'));
+        }
+
+        const startedAt = new Date().toISOString();
+        const pending = {
+            ...job,
+            experienceInsights: { status: 'pending', startedAt },
+            updatedAt: startedAt,
+        };
+        await writeJsonAtomic(filePath, pending);
+        res.json(pending);
+
+        // Fire-and-forget: keeps running in this same Node process after the response
+        // above is sent. Must never throw/reject unhandled — any failure here is only
+        // ever surfaced as a persisted experienceInsights.status: 'error'.
+        (async () => {
+            try {
+                const items = useFakeAi()
+                    ? await fake.evaluateExperienceMatches(job.title, job.company, job.descriptionRaw, cvText)
+                    : await claudeCli.evaluateExperienceMatches(job.title, job.company, job.descriptionRaw, cvText);
+                await mergeExperienceInsights(filePath, { status: 'done', items, startedAt, completedAt: new Date().toISOString() });
+            } catch (err) {
+                await mergeExperienceInsights(filePath, {
+                    status: 'error',
+                    errorMessage: err.message,
+                    startedAt,
+                    completedAt: new Date().toISOString(),
+                }).catch(() => {});
+            }
+        })();
+    });
+
     return router;
+}
+
+async function mergeExperienceInsights(filePath, experienceInsights) {
+    const fresh = await readJson(filePath);
+    await writeJsonAtomic(filePath, { ...fresh, experienceInsights, updatedAt: new Date().toISOString() });
 }
 
 // Condensed digest of an already-computed ATS result, passed as extra grounding to

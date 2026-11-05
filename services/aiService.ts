@@ -2,6 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
 import { CVData, ATSAnalysisResult, ATSKeyword, JobWorkMode, JobContractType, AiCallOperation, AiCallProvider, AiCallStatus } from "../types";
 import { getLangText, getLangArray, LANGUAGE_CODES } from '../lib/i18n';
+import { stripBold } from '../lib/inlineBold';
 import { logAiCall } from './observabilityService';
 
 // Types pour le provider IA
@@ -103,6 +104,7 @@ CRITICAL RULES — each field must contain ONE piece of information only, never 
 - "lastName": ONLY the family name (e.g. "FERREIRA")
 - "title": ONLY the professional job title line (e.g. "Lead QA Engineer | Test Automation | CI/CD"). Do NOT include location, email, phone, URLs or any other contact info here.
 - "email": ONLY the email address (e.g. "john@example.com")
+- "phone": ONLY the phone number as written (e.g. "+33 6 12 34 56 78"), else empty string
 - "medium": ONLY the Medium blog URL if present, else empty string
 - "location": ONLY the city / country (e.g. "Paris, France")
 - "linkedin": ONLY the LinkedIn profile URL
@@ -119,7 +121,7 @@ CRITICAL RULES — each field must contain ONE piece of information only, never 
 - experience[].techStack: comma-separated tech tags only (e.g. "Playwright, Cypress, GitLab CI")
 - education[].school: ONLY the school name
 - education[].degree: ONLY the degree / diploma name
-- education[].startDate / endDate: year only (e.g. "2008")
+- education[].year: ONLY the graduation year (e.g. "2008")
 - languages[]: each entry is one language with proficiency (e.g. "French (Native)")
 
 Return valid JSON only. No markdown, no code blocks, no extra keys.`;
@@ -265,6 +267,7 @@ const parseWithGemini = async (pdfBase64: string): Promise<any> => {
                             lastName:  { type: Type.STRING, description: "Family name only, e.g. 'FERREIRA'" },
                             title:     { type: Type.STRING, description: "Professional job title only, e.g. 'Lead QA Engineer | Test Automation'. No location, email or URLs." },
                             email:     { type: Type.STRING, description: "Email address only, e.g. 'john@example.com'" },
+                            phone:     { type: Type.STRING, description: "Phone number only, as written, or empty string" },
                             medium:    { type: Type.STRING, description: "Medium blog URL only, or empty string" },
                             location:  { type: Type.STRING, description: "City/country only, e.g. 'Paris, France'" },
                             linkedin:  { type: Type.STRING, description: "LinkedIn profile URL only" },
@@ -305,8 +308,7 @@ const parseWithGemini = async (pdfBase64: string): Promise<any> => {
                                 school: { type: Type.STRING },
                                 degree: { type: Type.STRING },
                                 location: { type: Type.STRING },
-                                startDate: { type: Type.STRING },
-                                endDate: { type: Type.STRING },
+                                year: { type: Type.STRING },
                                 description: { type: Type.STRING }
                             }
                         }
@@ -465,12 +467,12 @@ export const serializeCVForATS = (data: CVData): string => {
         lines.push(`\n${getLangText(e.role, currentLanguage)} at ${e.company} (${e.location})`);
         lines.push(`Period: ${getLangText(e.startDate, currentLanguage)} - ${getLangText(e.endDate, currentLanguage)}`);
         if (e.techStack) lines.push(`Tech: ${e.techStack}`);
-        for (const b of getLangArray(e.description, currentLanguage)) lines.push(`  - ${b}`);
+        for (const b of getLangArray(e.description, currentLanguage)) lines.push(`  - ${stripBold(b)}`);
     }
 
     lines.push('\n== EDUCATION ==');
     for (const edu of education) {
-        lines.push(`${getLangText(edu.degree, currentLanguage)} — ${edu.school} (${edu.startDate}–${edu.endDate})`);
+        lines.push(`${getLangText(edu.degree, currentLanguage)} — ${edu.school} (${edu.year})`);
         const desc = getLangText(edu.description, currentLanguage);
         if (desc) lines.push(`  ${desc}`);
     }
@@ -843,6 +845,7 @@ export const parseResumeFromPdf = async (
             lastName: extracted.personalInfo?.lastName || "",
             title: toBilingual(extracted.personalInfo?.title),
             email: extracted.personalInfo?.email || "",
+            phone: extracted.personalInfo?.phone || "",
             medium: extracted.personalInfo?.medium || "",
             location: extracted.personalInfo?.location || "",
             linkedin: extracted.personalInfo?.linkedin || "",
@@ -870,8 +873,7 @@ export const parseResumeFromPdf = async (
             school: e.school || "",
             degree: toBilingual(e.degree || ""),
             location: e.location || "",
-            startDate: e.startDate || "",
-            endDate: e.endDate || "",
+            year: e.year || e.endDate || e.startDate || "",
             description: toBilingual(e.description || "")
         })),
         certifications: [],

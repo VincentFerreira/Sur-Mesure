@@ -41,38 +41,72 @@
   \nopagebreak[4]
 }
 
+% Header layout
+\newlength{\headerphotomaxwidth}\setlength{\headerphotomaxwidth}{4.0cm}
+\newlength{\headertextwidth}
+\newlength{\headercolgap}\setlength{\headercolgap}{0.6cm}
+\newlength{\headerrulegap}\setlength{\headerrulegap}{0.3cm}
+\newsavebox{\headerbody}
+\newsavebox{\headerphoto}
+\newlength{\headergap}\setlength{\headergap}{0.5cm}
+% Fixed-width, centred icon box: keeps contact labels aligned regardless of icon width.
+\newcommand{\contacticon}[1]{\makebox[1.35em][c]{\color{accent}#1}\hspace{0.25em}}
+\hypersetup{hidelinks}
+
 \newcommand{\cvtag}[1]{
   \tikz[baseline]\node[anchor=base,draw=lightgray,rounded corners,inner xsep=1ex,inner ysep =0.75ex,text height=1.5ex,text depth=.25ex]{\small #1};
 }
 
 \begin{document}
 
-% HEADER (Photo Left, Info Right)
-\noindent
+% HEADER
+% The text block is typeset first into a box so its height can be measured;
+% the photo is then scaled to exactly that height (capped at
+% \headerphotomaxwidth wide) and both are centred on the same axis. The gap
+% between photo and text stays constant whatever the photo's aspect ratio.
 [[# hasPhoto ]]
-\begin{minipage}{0.22\textwidth}
-    \begin{center}
-        \includegraphics[width=3cm, height=3.5cm, keepaspectratio]{photo.[[ photoExtension ]]}
-    \end{center}
-\end{minipage}%
-\hspace{0.03\textwidth}%
-\begin{minipage}{0.75\textwidth}
+\setlength{\headertextwidth}{\dimexpr\linewidth-\headerphotomaxwidth-\headergap\relax}
 [[/ hasPhoto ]]
 [[^ hasPhoto ]]
-\begin{minipage}{\textwidth}
+\setlength{\headertextwidth}{\linewidth}
 [[/ hasPhoto ]]
-    {\fontsize{24}{30}\selectfont\color{darkblue}\textbf{[[ firstName ]] \uppercase{[[ lastName ]]}}} \\[0.2cm]
-    {\Large\color{accent} [[ title ]]} \\[0.3cm]
+\begin{lrbox}{\headerbody}\begin{minipage}[c]{\headertextwidth}
+  \raggedright
+  % Semibold (sb) for the whole name; fonts without it fall back to bold.
+  {\fontsize{26}{28}\fontseries{sb}\selectfont\color{darkblue}[[ firstName ]] \MakeUppercase{[[ lastName ]]}\par}
+  \vspace{0.18cm}
+  {\large\color{accent}[[ title ]]\par}
+[[# availability ]]
+  \vspace{0.2cm}
+  {\setlength{\fboxsep}{2.5pt}\colorbox{accent!10}{\footnotesize\bfseries\color{darkblue}\,\faCalendarCheck[regular]\;[[ availability ]]\,}\par}
+[[/ availability ]]
+  % Rule spacing is explicit (no baselineskip) so the gaps above and below it
+  % are equal and independent of the font size of the lines around it.
+  \par\nointerlineskip\vspace{\headerrulegap}
+  {\color{lightgray}\rule{\linewidth}{0.4pt}\par}
+  \nointerlineskip\vspace{\headerrulegap}
+  {\small\color{graytext}\renewcommand{\arraystretch}{1.25}%
+  % Natural-width columns: labels never wrap; the right column starts a fixed gap
+  % after the widest left label, so both columns stay aligned.
+  \begin{tabular}{@{}l@{\hspace{\headercolgap}}l@{}}
+[[# contactRows ]]
+  [[# left ]]\contacticon{\[[ icon ]]}[[# url ]]\href{[[ url ]]}{[[ text ]]}[[/ url ]][[^ url ]][[ text ]][[/ url ]][[/ left ]] &
+  [[# right ]]\contacticon{\[[ icon ]]}[[# url ]]\href{[[ url ]]}{[[ text ]]}[[/ url ]][[^ url ]][[ text ]][[/ url ]][[/ right ]] \\
+[[/ contactRows ]]
+  % Empirical: drop the extra strut depth \arraystretch adds under the last
+  % row so the photo's bottom edge lines up with the last contact line's descenders.
+  \noalign{\vspace{-4.3pt}}
+  \end{tabular}\par}
+\end{minipage}\end{lrbox}%
+\noindent
+[[# hasPhoto ]]
+\sbox{\headerphoto}{\includegraphics[width=\headerphotomaxwidth, height=\dimexpr\ht\headerbody+\dp\headerbody\relax, keepaspectratio]{photo.[[ photoExtension ]]}}%
+\begin{minipage}[c]{\wd\headerphoto}\usebox{\headerphoto}\end{minipage}%
+\hspace{\headergap}%
+[[/ hasPhoto ]]
+\usebox{\headerbody}
 
-    \small\color{graytext}
-    \faMapMarker* \hspace{0.1cm} [[ location ]] \\
-    \faEnvelope \hspace{0.1cm} [[ email ]] \quad
-    \faMedium \hspace{0.1cm} [[ medium ]] \\
-    \faLinkedin \hspace{0.1cm} [[ linkedin ]][[# github ]] \quad
-    \faGithub \hspace{0.1cm} [[ github ]][[/ github ]]
-\end{minipage}
-
-\vspace{0.5cm}
+\vspace{0.6cm}
 \noindent
 \small\color{graytext}
 [[ summary ]]
@@ -105,30 +139,25 @@
 [[/ description ]]
 \end{itemize}%
 \nopagebreak[4]%
-\noindent\hspace{2.82cm}\begin{minipage}[t]{\dimexpr\linewidth-2.82cm\relax}{\footnotesize \color{graytext} [[ tTech ]] [[ techStack ]]}\end{minipage}
+\noindent\hspace{2.82cm}\begin{minipage}[t]{\dimexpr\linewidth-2.82cm\relax}{\footnotesize \color{graytext} \textit{[[ tTech ]]} [[ techStack ]]}\end{minipage}
 [[# hasSpacing ]]
 \vspace{0.3cm}
 [[/ hasSpacing ]]
 [[/ experience ]]
-% EDUCATION
+% EDUCATION (certifications, then degrees)
 \cvsection{[[ tEducation ]]}
 \vspace{0.15cm}
 \begin{tabularx}{\linewidth}{@{}p{2.4cm} X@{}}
-[[# education ]]
-
-\textbf{[[ startDate ]] -- [[ endDate ]]} & \textbf{[[ degree ]]} \\
-& [[ school ]], [[ location ]] \\
-& {\small [[ description ]]} \\[0.2cm]
-[[/ education ]]
-\end{tabularx}
-\vspace{-0.5cm}
-% CERTIFICATIONS
-\cvsection{[[ tCertifications ]]}
-\vspace{0.15cm}
-\begin{tabularx}{\linewidth}{@{}p{2.4cm} X@{}}
+  \noalign{\vspace{0.2cm}}
 [[# certifications ]]
 \textbf{[[ year ]]} & \textbf{[[ title ]]} -- [[ issuer ]] \\[0.2cm]
 [[/ certifications ]]
+[[# education ]]
+
+\textbf{[[ year ]]} & \textbf{[[ degree ]]} \\
+& [[ school ]], [[ location ]] \\
+& {\small [[ description ]]} \\[0.2cm]
+[[/ education ]]
 \end{tabularx}
 \vspace{-0.5cm}
 % LANGUAGES

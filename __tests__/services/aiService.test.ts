@@ -82,8 +82,7 @@ const makeCV = (): CVData => ({
       school: 'INSA Lyon',
       degree: { fr: 'Master Informatique', en: 'MSc Computer Science' },
       location: 'Lyon',
-      startDate: '2016',
-      endDate: '2018',
+      year: '2018',
       description: { fr: 'Spécialisation IA', en: 'AI specialisation' },
     },
   ],
@@ -94,6 +93,15 @@ const makeCV = (): CVData => ({
 // ── serializeCVForATS ─────────────────────────────────────────────────────────
 
 describe('serializeCVForATS', () => {
+  it('strips *bold* markers from experience bullets', () => {
+    const base = makeCV();
+    const text = serializeCVForATS({
+      ...base,
+      experience: [{ ...base.experience[0], description: { fr: ['Automatisé *Playwright*'] } }],
+    });
+    expect(text).toContain('  - Automatisé Playwright');
+  });
+
   it('includes the personal info section header', () => {
     const text = serializeCVForATS(makeCV());
     expect(text).toContain('== PERSONAL INFO ==');
@@ -149,7 +157,7 @@ describe('serializeCVForATS', () => {
   it('includes the education section', () => {
     const text = serializeCVForATS(makeCV());
     expect(text).toContain('== EDUCATION ==');
-    expect(text).toContain('Master Informatique — INSA Lyon (2016–2018)');
+    expect(text).toContain('Master Informatique — INSA Lyon (2018)');
   });
 
   it('includes the languages section', () => {

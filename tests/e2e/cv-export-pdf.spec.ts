@@ -87,7 +87,6 @@ test('T6 - un titre de section ne reste jamais orphelin en bas de page', async (
 
   const sections = [
     { header: 'EDUCATION', firstContent: "Master's Degree in Software Architecture" },
-    { header: 'CERTIFICATIONS', firstContent: 'ISTQB Certified Tester Foundation Level' },
     { header: 'LANGUAGES', firstContent: 'French (Native)' },
   ];
 
@@ -107,7 +106,7 @@ test("T7 - tous les titres de section partagent la même marge gauche", async ({
   const { buffer } = await importAndExportPdf(page, 'cv-complet.json');
 
   const items = await readPdfTextPositions(buffer);
-  const titles = ['COMPÉTENCES', 'EXPÉRIENCE', 'ÉDUCATION', 'CERTIFICATIONS', 'LANGUES'];
+  const titles = ['COMPÉTENCES', 'EXPÉRIENCE', 'FORMATION', 'LANGUES'];
 
   const positions = titles.map(title => {
     const found = items.find(i => i.str.trim() === title);
@@ -135,8 +134,7 @@ test("T8 - l'espace entre un titre de section et son contenu reste cohérent d'u
   // \needspace, ce qui produit structurellement un écart plus grand sous le titre.
   const sections = [
     { title: 'COMPÉTENCES', firstContent: 'Langages' },
-    { title: 'ÉDUCATION', firstContent: '2013 – 2015' },
-    { title: 'CERTIFICATIONS', firstContent: '2023' },
+    { title: 'FORMATION', firstContent: '2023' },
     { title: 'LANGUES', firstContent: 'Français (Langue maternelle)' },
   ];
 
