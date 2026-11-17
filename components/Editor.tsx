@@ -1,5 +1,5 @@
 import React, { ChangeEvent, useState } from 'react';
-import { CVData, ExperienceItem, SkillCategory, EducationItem, CertificationItem } from '../types';
+import { CVData, ExperienceItem, SkillCategory, EducationItem, CertificationItem, ProjectItem } from '../types';
 import {
   getLangText, getLangArray,
   createMultiLangString, createMultiLangArray,
@@ -202,6 +202,32 @@ const Editor: React.FC<EditorProps> = ({ data, onChange }) => {
 
   const removeCertification = (index: number) => {
     onChange({ ...data, certifications: data.certifications.filter((_, i) => i !== index) });
+  };
+
+  const projects = data.projects ?? [];
+
+  const updateProject = (index: number, field: keyof Omit<ProjectItem, 'id'>, value: string) => {
+    const newProjects = [...projects];
+    newProjects[index] = field === 'description'
+      ? { ...newProjects[index], description: { ...newProjects[index].description, [lang]: value } }
+      : { ...newProjects[index], [field]: value };
+    onChange({ ...data, projects: newProjects });
+  };
+
+  const addProject = () => {
+    onChange({
+      ...data,
+      projects: [...projects, {
+        id: Date.now().toString(),
+        name: '',
+        description: createMultiLangString({ fr: '', en: '' }),
+        techStack: '',
+      }]
+    });
+  };
+
+  const removeProject = (index: number) => {
+    onChange({ ...data, projects: projects.filter((_, i) => i !== index) });
   };
 
   const updateLanguageItem = (index: number, value: string) => {
@@ -425,6 +451,33 @@ const Editor: React.FC<EditorProps> = ({ data, onChange }) => {
                     onChange={(e) => updateExperience(index, 'techStack', e.target.value)}
                     placeholder="Java, React, SQL..."
                   />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Personal projects */}
+        <SectionHeader title={t.projectsSection} id="projects" />
+        {activeSection === 'projects' && (
+          <div className="p-4 space-y-6">
+            <button onClick={addProject} data-testid="add-project-button" className="w-full py-2 bg-indigo-50 text-indigo-700 rounded font-medium hover:bg-indigo-100 transition-colors mb-4">
+              + {t.addProject}
+            </button>
+            {projects.map((project, index) => (
+              <div key={project.id} className="border border-slate-200 rounded-lg p-4 bg-white shadow-sm" data-testid={`project-${index}`}>
+                <div className="flex justify-between items-start mb-4">
+                  <h4 className="font-bold text-slate-700">{t.projectLabel} #{index + 1}</h4>
+                  <button onClick={() => removeProject(index)} aria-label="Delete project" className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4" /></button>
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  <input className="border p-2 rounded text-sm" placeholder={t.projectNameLabel} value={project.name} onChange={(e) => updateProject(index, 'name', e.target.value)} />
+                  <input className="border p-2 rounded text-sm" placeholder={t.projectUrlLabel} value={project.url ?? ''} onChange={(e) => updateProject(index, 'url', e.target.value)} />
+                  <textarea className="w-full border p-2 rounded text-sm" placeholder="Description" value={getLangText(project.description, lang)} onChange={(e) => updateProject(index, 'description', e.target.value)} />
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase">Tech Stack ({t.commaSeparated})</label>
+                    <input className="w-full border p-2 rounded text-sm" placeholder="TypeScript, React, Node.js..." value={project.techStack} onChange={(e) => updateProject(index, 'techStack', e.target.value)} />
+                  </div>
                 </div>
               </div>
             ))}

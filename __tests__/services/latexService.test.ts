@@ -445,3 +445,60 @@ describe('generateLatex — font selection', () => {
     expect(latex).toContain(getFontById('times').latexPackage);
   });
 });
+
+// ── Personal projects ─────────────────────────────────────────────────────────
+
+describe('generateLatex — personal projects', () => {
+  const project = {
+    id: 'p1',
+    name: 'Sur-Mesure',
+    description: { fr: 'Générateur de CV & suivi de candidatures', en: 'CV builder & job tracker' },
+    techStack: 'React, Node.js, LaTeX',
+  };
+
+  it('omits the section entirely when there are no projects (older CVs without the field)', () => {
+    const latex = generateLatex(makeCV());
+    expect(latex).not.toContain('Projets personnels');
+  });
+
+  it('renders name in bold, description, and tech stack in italics, between experience and education', () => {
+    const latex = generateLatex(makeCV({ projects: [project] }));
+    expect(latex).toContain('\\cvsection{Projets personnels}');
+    expect(latex).toContain('\\textbf{Sur-Mesure}');
+    expect(latex).toContain('Générateur de CV \\& suivi de candidatures');
+    expect(latex).toContain('\\textit{React, Node.js, LaTeX}');
+    // Table built in a box, then placed in the heading's paragraph like education (\needspace/\par there opened a big gap).
+    expect(latex).toMatch(/\\begin\{lrbox\}\{\\projectsbox\}\\begin\{tabularx\}[\s\S]*?\\textbf\{Sur-Mesure\}/);
+    // Reserves the measured table height before the heading, so heading + projects move pages together.
+    expect(latex).toMatch(/\\needspace\{\\dimexpr\\ht\\projectsbox[^\n]*\n\\cvsection\{Projets personnels\}/);
+    expect(latex).toMatch(/\\cvsection\{Projets personnels\}(?:\n%[^\n]*)*\n\\vspace\{0\.15cm\}\n\\usebox\{\\projectsbox\}/);
+    expect(latex).not.toMatch(/\\cvsection\{Projets personnels\}\s*\\needspace/);
+    const projectsAt = latex.indexOf('\\cvsection{Projets personnels}');
+    expect(projectsAt).toBeGreaterThan(latex.indexOf('\\cvsection{Expérience}'));
+    expect(projectsAt).toBeLessThan(latex.indexOf('\\cvsection{Formation}'));
+  });
+
+  it('uses the English heading and description when currentLanguage is en', () => {
+    const latex = generateLatex(makeCV({ currentLanguage: 'en', projects: [project] }));
+    expect(latex).toContain('\\cvsection{Personal Projects}');
+    expect(latex).toContain('CV builder \\& job tracker');
+  });
+
+  it('puts the link right-aligned on the title line, escaped for \\href', () => {
+    const latex = generateLatex(makeCV({ projects: [{ ...project, url: 'https://github.com/jean/sur-mesure#readme' }] }));
+    expect(latex).toContain(
+      '\\textbf{Sur-Mesure}\\hfill{\\small\\href{https://github.com/jean/sur-mesure\\#readme}{\\contacticon{\\faLink}github.com/jean/sur-mesure\\#readme}}'
+    );
+  });
+
+  it('adds https:// to a bare link and renders no link when it is empty', () => {
+    expect(generateLatex(makeCV({ projects: [{ ...project, url: 'github.com/jean/x' }] }))).toContain('\\href{https://github.com/jean/x}');
+    expect(generateLatex(makeCV({ projects: [{ ...project, url: '  ' }] }))).not.toContain('\\faLink}');
+  });
+
+  it('skips the tech line when the stack is empty', () => {
+    const latex = generateLatex(makeCV({ projects: [{ ...project, techStack: '' }] }));
+    expect(latex).toContain('\\textbf{Sur-Mesure}');
+    expect(latex).not.toMatch(/\\textit\{\}/);
+  });
+});

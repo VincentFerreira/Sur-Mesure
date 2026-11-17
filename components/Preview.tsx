@@ -2,7 +2,14 @@ import React from 'react';
 import { CVData } from '../types';
 import { getLangText, getLangArray, UI_TRANSLATIONS, LANGUAGES } from '../lib/i18n';
 import { splitBold } from '../lib/inlineBold';
-import { MapPin, Mail, PenLine, Phone } from 'lucide-react';
+import { Link2, MapPin, Mail, PenLine, Phone } from 'lucide-react';
+import { displayUrl } from '../services/latexService';
+
+/** Browser link target: adds https:// when no scheme was typed (no LaTeX escaping here). */
+const webHref = (url: string): string => {
+  const trimmed = url.trim();
+  return /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+};
 
 // lucide-react dropped brand/logo icons in v1; inlined here instead.
 const Linkedin: React.FC<{ className?: string }> = ({ className }) => (
@@ -22,7 +29,7 @@ interface PreviewProps {
 }
 
 const Preview: React.FC<PreviewProps> = ({ data }) => {
-  const { personalInfo, skills, experience, education, certifications, languages, currentLanguage: lang } = data;
+  const { personalInfo, skills, experience, education, certifications, projects = [], languages, currentLanguage: lang } = data;
   const h = UI_TRANSLATIONS[lang] ?? UI_TRANSLATIONS['fr'];
   const locale = LANGUAGES.find(l => l.code === lang)?.locale ?? 'fr-FR';
 
@@ -162,6 +169,35 @@ const Preview: React.FC<PreviewProps> = ({ data }) => {
           ))}
         </div>
       </div>
+
+      {/* PERSONAL PROJECTS */}
+      {projects.length > 0 && (
+        <div className="mb-8" data-testid="preview-projects">
+          <h3 className="text-xl font-bold text-indigo-800 border-b-2 border-indigo-800 mb-4 flex items-center gap-2">
+            <span className="text-2xl">🛠</span> {h.previewProjects}
+          </h3>
+          <div className="space-y-4">
+            {projects.map((project) => (
+              <div key={project.id}>
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="font-bold text-base text-slate-800">{project.name}</span>
+                  {project.url?.trim() && (
+                    <a href={webHref(project.url)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-slate-500 hover:text-indigo-600 shrink-0">
+                      <Link2 className="w-3 h-3 text-blue-500" /> {displayUrl(project.url)}
+                    </a>
+                  )}
+                </div>
+                {getLangText(project.description, lang) && (
+                  <div className="text-sm text-slate-600 whitespace-pre-line">{getLangText(project.description, lang)}</div>
+                )}
+                {project.techStack && (
+                  <div className="text-xs text-slate-500 italic mt-1">{project.techStack}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* EDUCATION (certifications, then degrees) */}
       <div className="mb-8">

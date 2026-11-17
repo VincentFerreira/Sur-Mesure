@@ -115,6 +115,12 @@ export interface UITranslations {
   certificationTitleLabel: string;
   issuerLabel: string;
   yearLabel: string;
+  // Personal projects
+  projectsSection: string;
+  addProject: string;
+  projectLabel: string;
+  projectNameLabel: string;
+  projectUrlLabel: string;
   // Languages list
   addLanguage: string;
   languagePlaceholder: string;
@@ -127,6 +133,7 @@ export interface UITranslations {
   previewSkills: string;
   previewExperience: string;
   previewEducation: string;
+  previewProjects: string;
   previewLanguages: string;
   previewTech: string;
   noPhoto: string;
@@ -175,6 +182,11 @@ export const UI_TRANSLATIONS: Record<Language, UITranslations> = {
     certificationTitleLabel: "Titre",
     issuerLabel: "Organisme",
     yearLabel: "Année",
+    projectsSection: "Projets personnels",
+    addProject: "Ajouter un projet",
+    projectLabel: "Projet",
+    projectNameLabel: "Nom du projet",
+    projectUrlLabel: "Lien (GitHub, démo…)",
     addLanguage: "Ajouter une langue",
     languagePlaceholder: "Langue (ex: Anglais - Courant)",
     newCategory: "Nouvelle Catégorie",
@@ -184,6 +196,7 @@ export const UI_TRANSLATIONS: Record<Language, UITranslations> = {
     previewSkills: "COMPÉTENCES",
     previewExperience: "EXPÉRIENCE PROFESSIONNELLE",
     previewEducation: "FORMATION",
+    previewProjects: "PROJETS PERSONNELS",
     previewLanguages: "LANGUES",
     previewTech: "Tech :",
     noPhoto: "Pas de photo",
@@ -230,6 +243,11 @@ export const UI_TRANSLATIONS: Record<Language, UITranslations> = {
     certificationTitleLabel: "Title",
     issuerLabel: "Issuing Organization",
     yearLabel: "Year",
+    projectsSection: "Personal Projects",
+    addProject: "Add project",
+    projectLabel: "Project",
+    projectNameLabel: "Project name",
+    projectUrlLabel: "Link (GitHub, demo…)",
     addLanguage: "Add language",
     languagePlaceholder: "Language (e.g. English - Fluent)",
     newCategory: "New Category",
@@ -239,6 +257,7 @@ export const UI_TRANSLATIONS: Record<Language, UITranslations> = {
     previewSkills: "SKILLS",
     previewExperience: "PROFESSIONAL EXPERIENCE",
     previewEducation: "EDUCATION",
+    previewProjects: "PERSONAL PROJECTS",
     previewLanguages: "LANGUAGES",
     previewTech: "Tech:",
     noPhoto: "No Photo",
@@ -253,6 +272,7 @@ export interface LaTeXTranslations {
   skills: string;
   experience: string;
   education: string;
+  projects: string;
   tech: string;
   languages: string;
 }
@@ -262,6 +282,7 @@ export const LATEX_TRANSLATIONS: Record<Language, LaTeXTranslations> = {
     skills: "Compétences",
     experience: "Expérience",
     education: "Formation",
+    projects: "Projets personnels",
     tech: "Tech :",
     languages: "Langues",
   },
@@ -269,6 +290,7 @@ export const LATEX_TRANSLATIONS: Record<Language, LaTeXTranslations> = {
     skills: "Skills",
     experience: "Experience",
     education: "Education",
+    projects: "Personal Projects",
     tech: "Tech:",
     languages: "Languages",
   },

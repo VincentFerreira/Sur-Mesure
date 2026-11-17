@@ -118,6 +118,7 @@ interface LatexTemplateData {
   tExperience: string;
   tEducation: string;
   tLanguages: string;
+  tProjects: string;
   tTech: string;
   skills: { name: string; items: string }[];
   experience: {
@@ -137,6 +138,9 @@ interface LatexTemplateData {
     location: string;
     description: string;
   }[];
+  hasProjects: boolean;
+  /** `url` is escaped for \href (empty when no link); `urlText` is the escaped label. */
+  projects: { name: string; description: string; techStack: string; url: string; urlText: string }[];
   certifications: {
     year: string;
     title: string;
@@ -146,7 +150,7 @@ interface LatexTemplateData {
 }
 
 const buildTemplateData = (data: CVData, fontId?: string): LatexTemplateData => {
-  const { personalInfo, skills, experience, education, certifications, languages, currentLanguage } = data;
+  const { personalInfo, skills, experience, education, certifications, projects, languages, currentLanguage } = data;
   const t = LATEX_TRANSLATIONS[currentLanguage] ?? LATEX_TRANSLATIONS['fr'];
   const photoData = extractBase64Data(personalInfo.photo);
 
@@ -170,6 +174,7 @@ const buildTemplateData = (data: CVData, fontId?: string): LatexTemplateData => 
     tExperience: t.experience,
     tEducation: t.education,
     tLanguages: t.languages,
+    tProjects: t.projects,
     tTech: t.tech,
     skills: skills.map(s => ({
       name: escapeLatex(getLangText(s.name, currentLanguage)),
@@ -191,6 +196,14 @@ const buildTemplateData = (data: CVData, fontId?: string): LatexTemplateData => 
       school: escapeLatex(edu.school),
       location: escapeLatex(edu.location),
       description: escapeLatex(getLangText(edu.description, currentLanguage)),
+    })),
+    hasProjects: (projects ?? []).length > 0,
+    projects: (projects ?? []).map(project => ({
+      name: escapeLatex(project.name),
+      description: escapeLatexMultiline(getLangText(project.description, currentLanguage)),
+      techStack: escapeLatex(project.techStack),
+      url: hrefUrl(project.url ?? ''),
+      urlText: escapeLatex(displayUrl(project.url ?? '')),
     })),
     certifications: (certifications ?? []).map(cert => ({
       year: escapeLatex(cert.year),

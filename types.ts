@@ -25,6 +25,8 @@ export interface CVData {
   experience: ExperienceItem[];
   education: EducationItem[];
   certifications: CertificationItem[];
+  /** Personal / side projects. Optional: CVs created before this section existed have none. */
+  projects?: ProjectItem[];
   languages: MultiLangStringArray;
 }
 
@@ -52,6 +54,15 @@ export interface EducationItem {
   location: string;
   year: string;
   description: MultiLangString;
+}
+
+export interface ProjectItem {
+  id: string;
+  name: string;
+  description: MultiLangString;
+  techStack: string;
+  /** Optional link (repo, demo…), shown on the project's title line. */
+  url?: string;
 }
 
 export interface CertificationItem {

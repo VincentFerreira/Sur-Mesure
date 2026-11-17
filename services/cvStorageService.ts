@@ -124,6 +124,13 @@ export function migrateCV(json: any): CVData | null {
     migrated.certifications = [];
   }
 
+  if (Array.isArray(migrated.projects)) {
+    migrated.projects = migrated.projects.map((project: any) => ({
+      ...project,
+      description: toBilingual(project.description),
+    }));
+  }
+
   if (Array.isArray(migrated.languages)) {
     migrated.languages = toBilingualArray(migrated.languages);
   } else if (!migrated.languages) {

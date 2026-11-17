@@ -439,7 +439,7 @@ export const withTimeout = <T>(promise: Promise<T>, ms: number = TIMEOUT_MS): Pr
 // ─── ATS Analysis ────────────────────────────────────────────────────────────
 
 export const serializeCVForATS = (data: CVData): string => {
-    const { personalInfo: p, skills, experience, education, languages, currentLanguage } = data;
+    const { personalInfo: p, skills, experience, education, projects, languages, currentLanguage } = data;
     const lines: string[] = [];
 
     lines.push('== PERSONAL INFO ==');
@@ -468,6 +468,17 @@ export const serializeCVForATS = (data: CVData): string => {
         lines.push(`Period: ${getLangText(e.startDate, currentLanguage)} - ${getLangText(e.endDate, currentLanguage)}`);
         if (e.techStack) lines.push(`Tech: ${e.techStack}`);
         for (const b of getLangArray(e.description, currentLanguage)) lines.push(`  - ${stripBold(b)}`);
+    }
+
+    if (projects?.length) {
+        lines.push('\n== PERSONAL PROJECTS ==');
+        for (const pr of projects) {
+            lines.push(`\n${pr.name}`);
+            const desc = getLangText(pr.description, currentLanguage);
+            if (desc) lines.push(`  ${desc}`);
+            if (pr.techStack) lines.push(`Tech: ${pr.techStack}`);
+            if (pr.url) lines.push(`Link: ${pr.url}`);
+        }
     }
 
     lines.push('\n== EDUCATION ==');

@@ -48,6 +48,7 @@
 \newlength{\headerrulegap}\setlength{\headerrulegap}{0.3cm}
 \newsavebox{\headerbody}
 \newsavebox{\headerphoto}
+\newsavebox{\projectsbox}
 \newlength{\headergap}\setlength{\headergap}{0.5cm}
 % Fixed-width, centred icon box: keeps contact labels aligned regardless of icon width.
 \newcommand{\contacticon}[1]{\makebox[1.35em][c]{\color{accent}#1}\hspace{0.25em}}
@@ -144,6 +145,31 @@
 \vspace{0.3cm}
 [[/ hasSpacing ]]
 [[/ experience ]]
+[[# hasProjects ]]
+% PERSONAL PROJECTS
+% The table is typeset into a box first so its real height is known: reserving
+% that much (plus the heading) moves heading + projects to the next page
+% together. \cvsection's own \needspace{2.5cm} is not enough for 2+ projects
+% and left the heading orphaned at the bottom of the page.
+\begin{lrbox}{\projectsbox}\begin{tabularx}{\linewidth}{@{}X@{}}
+  \noalign{\vspace{0.2cm}}
+[[# projects ]]
+% Optional link, right-aligned on the title line (same icon style as the header).
+\textbf{[[ name ]]}[[# url ]]\hfill{\small\href{[[ url ]]}{\contacticon{\faLink}[[ urlText ]]}}[[/ url ]] \\
+% Tech stack shares the description's cell: as its own row it would get a
+% full-size strut and sit visibly detached from the description.
+[[ description ]][[# techStack ]]\par{\footnotesize\color{graytext}\textit{[[ techStack ]]}}[[/ techStack ]] \\
+\noalign{\vspace{0.25cm}}
+[[/ projects ]]
+\end{tabularx}\end{lrbox}
+\needspace{\dimexpr\ht\projectsbox+\dp\projectsbox+2.5cm\relax}
+\cvsection{[[ tProjects ]]}
+% Same structure as EDUCATION: the table sits in the heading's paragraph, so it
+% gets the same gap under the rule. Don't add \needspace / \par between the
+% heading and the table: ending the heading's paragraph early opens a ~1cm gap.
+\vspace{0.15cm}
+\usebox{\projectsbox}
+[[/ hasProjects ]]
 % EDUCATION (certifications, then degrees)
 \cvsection{[[ tEducation ]]}
 \vspace{0.15cm}
