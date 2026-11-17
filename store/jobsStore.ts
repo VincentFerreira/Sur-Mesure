@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import { AtsResult, Job, JobEvent, JobStatus } from '../types';
 import { ApiError } from '../services/apiClient';
 import {
+  addAppointment as addAppointmentRequest,
+  AppointmentInput,
+  deleteAppointment as deleteAppointmentRequest,
+  updateAppointment as updateAppointmentRequest,
   addJobEvent,
   createJob,
   CreateJobInput,
@@ -30,6 +34,10 @@ interface JobsState {
   addEvent: (id: string, event: Pick<JobEvent, 'type' | 'comment' | 'from' | 'to'>) => Promise<Job>;
   scoreJob: (id: string, payload: { cvId: string; cvContentHash: string; ats: AtsResult }) => Promise<Job>;
   moveJob: (id: string, status: JobStatus) => Promise<void>;
+  addAppointment: (jobId: string, input: AppointmentInput) => Promise<Job>;
+  updateAppointment: (jobId: string, appointmentId: string, patch: Partial<AppointmentInput> & { done?: boolean }) => Promise<Job>;
+  deleteAppointment: (jobId: string, appointmentId: string) => Promise<Job>;
+  toggleAppointmentDone: (jobId: string, appointmentId: string, done: boolean) => Promise<Job | null>;
 }
 
 export const useJobsStore = create<JobsState>((set, get) => ({
@@ -84,6 +92,46 @@ export const useJobsStore = create<JobsState>((set, get) => ({
     const updated = await addJobEvent(id, event);
     set({ jobs: get().jobs.map((j) => (j.id === id ? updated : j)) });
     return updated;
+  },
+
+  addAppointment: async (jobId, input) => {
+    const updated = await addAppointmentRequest(jobId, input);
+    set({ jobs: get().jobs.map((j) => (j.id === jobId ? updated : j)) });
+    return updated;
+  },
+
+  updateAppointment: async (jobId, appointmentId, patch) => {
+    const updated = await updateAppointmentRequest(jobId, appointmentId, patch);
+    set({ jobs: get().jobs.map((j) => (j.id === jobId ? updated : j)) });
+    return updated;
+  },
+
+  deleteAppointment: async (jobId, appointmentId) => {
+    const updated = await deleteAppointmentRequest(jobId, appointmentId);
+    set({ jobs: get().jobs.map((j) => (j.id === jobId ? updated : j)) });
+    return updated;
+  },
+
+  // Optimistic, like moveJob: the item leaves the agenda immediately and comes back
+  // (with an error banner) if the request fails. Returns null on failure.
+  toggleAppointmentDone: async (jobId, appointmentId, done) => {
+    const previous = get().jobs;
+    set({
+      error: null,
+      jobs: previous.map((j) =>
+        j.id === jobId
+          ? { ...j, appointments: (j.appointments ?? []).map((a) => (a.id === appointmentId ? { ...a, done } : a)) }
+          : j
+      ),
+    });
+    try {
+      const updated = await updateAppointmentRequest(jobId, appointmentId, { done });
+      set({ jobs: get().jobs.map((j) => (j.id === jobId ? updated : j)) });
+      return updated;
+    } catch (err) {
+      set({ jobs: previous, error: err instanceof ApiError ? err.message : 'Unable to update appointment.' });
+      return null;
+    }
   },
 
   scoreJob: async (id, payload) => {

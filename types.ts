@@ -138,6 +138,25 @@ export interface JobEvent {
   comment?: string;
 }
 
+// Scheduled, future-facing items on a job (a call with a recruiter, an interview, a
+// follow-up reminder, an application deadline) — unlike `JobEvent`, which only records
+// what already happened. Mirrored as a plain array in server/routes.jobs.js. The job's
+// `nextActionAt`/`nextActionLabel` are derived server-side from the earliest
+// appointment that isn't done (see syncNextAction there).
+export const APPOINTMENT_TYPES = ['call', 'interview', 'follow_up', 'deadline', 'other'] as const;
+export type AppointmentType = (typeof APPOINTMENT_TYPES)[number];
+
+export interface JobAppointment {
+  id: string;
+  at: string; // ISO — the scheduled date/time
+  type: AppointmentType;
+  label: string;
+  contact?: string;
+  notes?: string;
+  done: boolean;
+  createdAt: string; // ISO
+}
+
 /**
  * Score for one CV against one job — embedded directly on the Job (§ "one active CV per job").
  * Wraps the same `ATSAnalysisResult` the standalone ATS Checker produces, so the two screens
@@ -207,6 +226,8 @@ export interface Job {
   nextActionLabel?: string;
   notes?: string;
   events: JobEvent[];
+  // Absent on jobs created before appointments existed — read as [].
+  appointments?: JobAppointment[];
   createdAt: string; // ISO
   updatedAt: string; // ISO
 }

@@ -529,6 +529,79 @@ describe('Jobs API', () => {
     });
   });
 
+  describe('appointments', () => {
+    let jobId: string;
+
+    beforeAll(async () => {
+      const res = await request(app)
+        .post('/api/jobs')
+        .send({ company: 'Externatic', title: 'Dev', descriptionRaw: 'd' });
+      jobId = res.body.id;
+      jobIdsToClean.push(jobId);
+    });
+
+    it('adds an appointment and derives nextActionAt from the earliest pending one', async () => {
+      const later = await request(app)
+        .post(`/api/jobs/${jobId}/appointments`)
+        .send({ at: '2030-01-20T10:00:00.000Z', type: 'interview', label: 'Tech interview' });
+      expect(later.status).toBe(201);
+      expect(later.body.nextActionLabel).toBe('Tech interview');
+
+      const sooner = await request(app)
+        .post(`/api/jobs/${jobId}/appointments`)
+        .send({ at: '2030-01-10T09:30:00.000Z', type: 'call', label: 'Recruiter call', contact: 'Externatic' });
+      expect(sooner.status).toBe(201);
+      expect(sooner.body.appointments).toHaveLength(2);
+      expect(sooner.body.appointments[1]).toMatchObject({ contact: 'Externatic', done: false });
+      expect(sooner.body.nextActionAt).toBe('2030-01-10T09:30:00.000Z');
+      expect(sooner.body.nextActionLabel).toBe('Recruiter call');
+    });
+
+    it('rejects invalid input', async () => {
+      const url = `/api/jobs/${jobId}/appointments`;
+      expect((await request(app).post(url).send({ at: 'nope', type: 'call', label: 'x' })).status).toBe(400);
+      expect((await request(app).post(url).send({ at: '2030-01-01', type: 'bogus', label: 'x' })).status).toBe(400);
+      expect((await request(app).post(url).send({ at: '2030-01-01', type: 'call', label: '  ' })).status).toBe(400);
+    });
+
+    it('marking done logs a timeline event and moves nextActionAt to the next pending one', async () => {
+      const job = (await request(app).get(`/api/jobs/${jobId}`)).body;
+      const call = job.appointments.find((a: { label: string }) => a.label === 'Recruiter call');
+      const res = await request(app).patch(`/api/jobs/${jobId}/appointments/${call.id}`).send({ done: true });
+      expect(res.status).toBe(200);
+      expect(res.body.events.at(-1)).toMatchObject({ type: 'follow_up', comment: 'Recruiter call' });
+      expect(res.body.nextActionLabel).toBe('Tech interview');
+    });
+
+    it('clears a removed optional field on edit', async () => {
+      const job = (await request(app).get(`/api/jobs/${jobId}`)).body;
+      const call = job.appointments.find((a: { label: string }) => a.label === 'Recruiter call');
+      const res = await request(app).patch(`/api/jobs/${jobId}/appointments/${call.id}`).send({ contact: '' });
+      expect(res.body.appointments.find((a: { id: string }) => a.id === call.id).contact).toBeUndefined();
+    });
+
+    it('ignores appointments sent through PATCH /api/jobs/:id', async () => {
+      const res = await request(app).patch(`/api/jobs/${jobId}`).send({ appointments: [] });
+      expect(res.body.appointments).toHaveLength(2);
+    });
+
+    it('deleting the last pending appointment clears nextActionAt', async () => {
+      const job = (await request(app).get(`/api/jobs/${jobId}`)).body;
+      const interview = job.appointments.find((a: { label: string }) => a.label === 'Tech interview');
+      const res = await request(app).delete(`/api/jobs/${jobId}/appointments/${interview.id}`);
+      expect(res.status).toBe(200);
+      expect(res.body.nextActionAt).toBeUndefined();
+      expect(res.body.nextActionLabel).toBeUndefined();
+    });
+
+    it('returns 404 for an unknown appointment', async () => {
+      const res = await request(app)
+        .patch(`/api/jobs/${jobId}/appointments/00000000-0000-0000-0000-000000000000`)
+        .send({ done: true });
+      expect(res.status).toBe(404);
+    });
+  });
+
   describe('POST /api/jobs/:id/score', () => {
     let jobId: string;
 

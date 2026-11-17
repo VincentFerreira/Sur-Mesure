@@ -13,6 +13,7 @@ import { AIProvider, analyzeATS, atsProviderModel, serializeCVForATS } from '../
 import { generateApplicationText } from '../../services/applicationTextService';
 import { STATUS_META } from './statusMeta';
 import JobTimeline from './JobTimeline';
+import JobAppointments from './JobAppointments';
 import JobForm from './JobForm';
 import AtsReport from '../matches/AtsReport';
 
@@ -486,6 +487,8 @@ const JobDetail: React.FC<Props> = ({ jobId }) => {
             <p className="text-sm text-slate-600 whitespace-pre-wrap">{job.notes}</p>
           </div>
         )}
+
+        <JobAppointments job={job} onChange={setJob} />
 
         <div className="bg-white border border-slate-200 rounded-xl p-4">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Timeline</p>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, CalendarClock } from 'lucide-react';
 import { CvMeta, Job } from '../../types';
 import { isJobStale } from '../../lib/jobStale';
 import ScoreBadge from '../matches/ScoreBadge';
@@ -36,6 +36,19 @@ const JobCard: React.FC<Props> = ({ job, cv, draggable, onDragStart, onClick }) 
           {job.ats && <ScoreBadge score={job.ats.analysis.overallScore} />}
         </div>
       </div>
+      {job.nextActionAt && (
+        <p
+          data-testid={`job-card-next-action-${job.id}`}
+          className={`flex items-center gap-1 text-[11px] mt-1.5 truncate ${
+            new Date(job.nextActionAt).getTime() < Date.now() ? 'text-amber-600 font-medium' : 'text-indigo-600'
+          }`}
+        >
+          <CalendarClock className="w-3 h-3 shrink-0" />
+          <span className="truncate">
+            {formatDate(job.nextActionAt)}{job.nextActionLabel ? ` · ${job.nextActionLabel}` : ''}
+          </span>
+        </p>
+      )}
       <p className="text-[11px] text-slate-300 mt-1.5">{formatDate(job.updatedAt)}</p>
     </div>
   );
