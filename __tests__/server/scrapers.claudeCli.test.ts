@@ -539,7 +539,7 @@ describe('evaluateExperienceMatches (claudeCli)', () => {
         mockExecFile.mockResolvedValue({ stdout: cliJsonResult(JSON.stringify({ items })) });
         const result = await evaluateExperienceMatches('QA Engineer', 'Acme', 'desc', 'cv text');
         expect(result).toHaveLength(5);
-        expect(result.every((i) => typeof i.experience === 'string' && typeof i.reason === 'string')).toBe(true);
+        expect(result.every((i: { experience: unknown; reason: unknown }) => typeof i.experience === 'string' && typeof i.reason === 'string')).toBe(true);
     });
 
     it('throws instead of silently returning an empty list when the response has no items array', async () => {
