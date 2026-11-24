@@ -168,3 +168,19 @@ export async function generateApplicationText(jobTitle, company, jobDescription,
     const label = APPLICATION_TEXT_LABELS[textType] ?? textType;
     return `[Fake ${label}] Applying for ${jobTitle} at ${company}, drawing on: ${cvSnippet.replace(/^- /, '')}`;
 }
+
+// Deterministic stand-in for claudeCli.js's evaluateExperienceMatches — up to 2 real
+// `- ` bullets from the supplied CV text, each with a templated reason referencing the
+// job title, so e2e assertions have real (non-empty, CV-grounded) items to check
+// without a real CLI call.
+export async function evaluateExperienceMatches(jobTitle, company, jobDescription, cvText) {
+    const bullets = (cvText || '')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith('- '))
+        .map((l) => l.replace(/^- /, ''));
+    return bullets.slice(0, 2).map((experience) => ({
+        experience,
+        reason: `[Fake] Directly relevant to the ${jobTitle} role at ${company}.`,
+    }));
+}

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { CvMeta } from '../types';
-import { listCVs, deleteCV } from '../services/cvStorageService';
+import { listCVs, deleteCV, duplicateCV } from '../services/cvStorageService';
 
 interface CvsState {
   cvs: CvMeta[];
@@ -8,6 +8,7 @@ interface CvsState {
   error: string | null;
   fetchCvs: () => Promise<void>;
   archiveCv: (id: string) => Promise<void>;
+  duplicateCv: (id: string) => Promise<void>;
 }
 
 export const useCvsStore = create<CvsState>((set, get) => ({
@@ -32,6 +33,18 @@ export const useCvsStore = create<CvsState>((set, get) => ({
       await deleteCV(id);
     } catch {
       set({ cvs: previous, error: 'Unable to archive this CV.' });
+    }
+  },
+
+  // Not optimistic: the copy's id and label come from the server.
+  duplicateCv: async (id: string) => {
+    set({ error: null });
+    try {
+      const copy = await duplicateCV(id);
+      // Most recently updated first, matching the server's list order.
+      set({ cvs: [copy, ...get().cvs] });
+    } catch {
+      set({ error: 'Unable to duplicate this CV.' });
     }
   },
 }));

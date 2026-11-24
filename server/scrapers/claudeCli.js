@@ -661,3 +661,40 @@ export async function generateApplicationText(jobTitle, company, jobDescription,
     const text = await runClaude(prompt, '', 'generate_application_text', { textType });
     return text.trim();
 }
+
+// ─── Experience-match insights ─────────────────────────────────────────────────────
+
+function buildExperienceInsightsPrompt(jobTitle, company, jobDescription, cvText) {
+    return `You pick out which parts of a job seeker's real CV best match a specific job posting — never invent experience, skills, or achievements that aren't in the CV text below. Each item must cite something concretely present in the CV (a real project, role, technology, or measurable result).
+
+Pick the 3-5 strongest matches. For each one, give:
+- "experience": a short quote or close paraphrase of the specific CV bullet or achievement (not a generic restatement of the job posting)
+- "reason": one sentence on why it matters for this specific posting, citing what the posting actually asks for
+
+== TARGET JOB ==
+Title: ${jobTitle}
+Company: ${company}
+Description: ${jobDescription}
+
+== CANDIDATE'S CV ==
+${cvText}
+
+Return ONLY valid JSON, no markdown: {"items": [{"experience": string, "reason": string}]} — 3 to 5 items, ranked strongest first.`;
+}
+
+// No tools, no budget flag — same shape as expandKeywords/qualifyBatch. Deliberately
+// does NOT catch/fall back on error or unparsable output (unlike expandKeywords
+// degrading to the original titles) — this always runs as a background task kicked
+// off by routes.jobs.js's POST /:id/evaluate-experience-matches, which is what turns
+// a thrown error here into a persisted `experienceInsights.status: 'error'` on the
+// job record; silently returning an empty list would look like "no matches found"
+// rather than "the call failed," which is a meaningfully different, worse UI lie.
+export async function evaluateExperienceMatches(jobTitle, company, jobDescription, cvText) {
+    const prompt = buildExperienceInsightsPrompt(jobTitle, company, jobDescription, cvText);
+    const text = await runClaude(prompt, '', 'evaluate_experience_matches');
+    const parsed = JSON.parse(stripCodeFence(text));
+    if (!Array.isArray(parsed.items)) throw new Error('claude CLI returned no items array for experience insights');
+    return parsed.items
+        .filter((i) => i && typeof i.experience === 'string' && typeof i.reason === 'string')
+        .slice(0, 5);
+}

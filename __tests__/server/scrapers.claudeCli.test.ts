@@ -30,7 +30,7 @@ vi.mock('child_process', () => ({
     spawn: (...args: unknown[]) => mockSpawn(...args),
 }));
 
-const { searchAll, expandKeywords, qualifyAll, generateApplicationText, configureObservability } = await import('../../server/scrapers/claudeCli.js');
+const { searchAll, expandKeywords, qualifyAll, generateApplicationText, evaluateExperienceMatches, configureObservability } = await import('../../server/scrapers/claudeCli.js');
 
 function cliJsonResult(result: string, overrides: Record<string, unknown> = {}) {
     return JSON.stringify({ is_error: false, subtype: 'success', result, ...overrides });
@@ -513,6 +513,43 @@ describe('generateApplicationText (claudeCli)', () => {
         await expect(
             generateApplicationText('QA Engineer', 'Acme', 'desc', 'cv text', 'referral_message')
         ).rejects.toThrow('claude CLI invocation failed');
+    });
+});
+
+describe('evaluateExperienceMatches (claudeCli)', () => {
+    it('parses the items array out of the CLI JSON response', async () => {
+        mockExecFile.mockResolvedValue({
+            stdout: cliJsonResult(JSON.stringify({
+                items: [
+                    { experience: 'Automated a full regression suite', reason: 'Matches the QA automation requirement.' },
+                    { experience: 'Led a team of 3 QA engineers', reason: 'Matches the seniority requirement.' },
+                ],
+            })),
+        });
+        const items = await evaluateExperienceMatches('QA Engineer', 'Acme', 'We need a senior QA automation lead.', 'EXPERIENCE\n- Automated a full regression suite');
+        expect(items).toEqual([
+            { experience: 'Automated a full regression suite', reason: 'Matches the QA automation requirement.' },
+            { experience: 'Led a team of 3 QA engineers', reason: 'Matches the seniority requirement.' },
+        ]);
+    });
+
+    it('caps items at 5 and drops malformed entries', async () => {
+        const items = Array.from({ length: 7 }, (_, i) => ({ experience: `exp ${i}`, reason: `reason ${i}` }));
+        items.push({ experience: 'missing reason' } as unknown as { experience: string; reason: string });
+        mockExecFile.mockResolvedValue({ stdout: cliJsonResult(JSON.stringify({ items })) });
+        const result = await evaluateExperienceMatches('QA Engineer', 'Acme', 'desc', 'cv text');
+        expect(result).toHaveLength(5);
+        expect(result.every((i: { experience: unknown; reason: unknown }) => typeof i.experience === 'string' && typeof i.reason === 'string')).toBe(true);
+    });
+
+    it('throws instead of silently returning an empty list when the response has no items array', async () => {
+        mockExecFile.mockResolvedValue({ stdout: cliJsonResult(JSON.stringify({ notItems: [] })) });
+        await expect(evaluateExperienceMatches('QA Engineer', 'Acme', 'desc', 'cv text')).rejects.toThrow('no items array');
+    });
+
+    it('propagates the error instead of falling back (no sensible default insights exist)', async () => {
+        mockExecFile.mockRejectedValue(new Error('spawn claude ENOENT'));
+        await expect(evaluateExperienceMatches('QA Engineer', 'Acme', 'desc', 'cv text')).rejects.toThrow('claude CLI invocation failed');
     });
 });
 

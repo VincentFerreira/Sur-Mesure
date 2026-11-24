@@ -78,10 +78,12 @@ export interface UITranslations {
   firstName: string;
   lastName: string;
   jobTitle: string;
+  availabilityLabel: string;
   changePhoto: string;
   photoLoaded: string;
   professionalSummary: string;
   address: string;
+  phoneLabel: string;
   // Skills
   categoryPlaceholder: string;
   skillsListPlaceholder: string;
@@ -96,6 +98,8 @@ export interface UITranslations {
   locationLabel: string;
   responsibilitiesLabel: string;
   addLine: string;
+  moveUp: string;
+  moveDown: string;
   commaSeparated: string;
   // Education
   addEducation: string;
@@ -111,6 +115,12 @@ export interface UITranslations {
   certificationTitleLabel: string;
   issuerLabel: string;
   yearLabel: string;
+  // Personal projects
+  projectsSection: string;
+  addProject: string;
+  projectLabel: string;
+  projectNameLabel: string;
+  projectUrlLabel: string;
   // Languages list
   addLanguage: string;
   languagePlaceholder: string;
@@ -123,7 +133,7 @@ export interface UITranslations {
   previewSkills: string;
   previewExperience: string;
   previewEducation: string;
-  previewCertifications: string;
+  previewProjects: string;
   previewLanguages: string;
   previewTech: string;
   noPhoto: string;
@@ -139,10 +149,12 @@ export const UI_TRANSLATIONS: Record<Language, UITranslations> = {
     firstName: "Prénom",
     lastName: "Nom",
     jobTitle: "Titre du poste",
+    availabilityLabel: "Disponibilité",
     changePhoto: "Changer la photo",
     photoLoaded: "Photo chargée",
     professionalSummary: "Résumé professionnel",
     address: "Adresse",
+    phoneLabel: "Téléphone",
     categoryPlaceholder: "Catégorie (ex: Frameworks)",
     skillsListPlaceholder: "Liste des compétences séparées par des virgules",
     addCategory: "Ajouter une catégorie",
@@ -155,6 +167,8 @@ export const UI_TRANSLATIONS: Record<Language, UITranslations> = {
     locationLabel: "Lieu",
     responsibilitiesLabel: "Responsabilités",
     addLine: "Ajouter une ligne",
+    moveUp: "Monter",
+    moveDown: "Descendre",
     commaSeparated: "séparé par virgules",
     addEducation: "Ajouter une formation",
     educationLabel: "Formation",
@@ -168,6 +182,11 @@ export const UI_TRANSLATIONS: Record<Language, UITranslations> = {
     certificationTitleLabel: "Titre",
     issuerLabel: "Organisme",
     yearLabel: "Année",
+    projectsSection: "Projets personnels",
+    addProject: "Ajouter un projet",
+    projectLabel: "Projet",
+    projectNameLabel: "Nom du projet",
+    projectUrlLabel: "Lien (GitHub, démo…)",
     addLanguage: "Ajouter une langue",
     languagePlaceholder: "Langue (ex: Anglais - Courant)",
     newCategory: "Nouvelle Catégorie",
@@ -177,7 +196,7 @@ export const UI_TRANSLATIONS: Record<Language, UITranslations> = {
     previewSkills: "COMPÉTENCES",
     previewExperience: "EXPÉRIENCE PROFESSIONNELLE",
     previewEducation: "FORMATION",
-    previewCertifications: "CERTIFICATIONS",
+    previewProjects: "PROJETS PERSONNELS",
     previewLanguages: "LANGUES",
     previewTech: "Tech :",
     noPhoto: "Pas de photo",
@@ -191,10 +210,12 @@ export const UI_TRANSLATIONS: Record<Language, UITranslations> = {
     firstName: "First Name",
     lastName: "Last Name",
     jobTitle: "Job Title",
+    availabilityLabel: "Availability",
     changePhoto: "Change Photo",
     photoLoaded: "Photo loaded",
     professionalSummary: "Professional Summary",
     address: "Location",
+    phoneLabel: "Phone",
     categoryPlaceholder: "Category (e.g. Frameworks)",
     skillsListPlaceholder: "List of skills separated by commas",
     addCategory: "Add category",
@@ -207,6 +228,8 @@ export const UI_TRANSLATIONS: Record<Language, UITranslations> = {
     locationLabel: "Location",
     responsibilitiesLabel: "Responsibilities",
     addLine: "Add line",
+    moveUp: "Move up",
+    moveDown: "Move down",
     commaSeparated: "comma separated",
     addEducation: "Add education",
     educationLabel: "Education",
@@ -220,6 +243,11 @@ export const UI_TRANSLATIONS: Record<Language, UITranslations> = {
     certificationTitleLabel: "Title",
     issuerLabel: "Issuing Organization",
     yearLabel: "Year",
+    projectsSection: "Personal Projects",
+    addProject: "Add project",
+    projectLabel: "Project",
+    projectNameLabel: "Project name",
+    projectUrlLabel: "Link (GitHub, demo…)",
     addLanguage: "Add language",
     languagePlaceholder: "Language (e.g. English - Fluent)",
     newCategory: "New Category",
@@ -229,7 +257,7 @@ export const UI_TRANSLATIONS: Record<Language, UITranslations> = {
     previewSkills: "SKILLS",
     previewExperience: "PROFESSIONAL EXPERIENCE",
     previewEducation: "EDUCATION",
-    previewCertifications: "CERTIFICATIONS",
+    previewProjects: "PERSONAL PROJECTS",
     previewLanguages: "LANGUAGES",
     previewTech: "Tech:",
     noPhoto: "No Photo",
@@ -244,7 +272,7 @@ export interface LaTeXTranslations {
   skills: string;
   experience: string;
   education: string;
-  certifications: string;
+  projects: string;
   tech: string;
   languages: string;
 }
@@ -253,8 +281,8 @@ export const LATEX_TRANSLATIONS: Record<Language, LaTeXTranslations> = {
   fr: {
     skills: "Compétences",
     experience: "Expérience",
-    education: "Éducation",
-    certifications: "Certifications",
+    education: "Formation",
+    projects: "Projets personnels",
     tech: "Tech :",
     languages: "Langues",
   },
@@ -262,7 +290,7 @@ export const LATEX_TRANSLATIONS: Record<Language, LaTeXTranslations> = {
     skills: "Skills",
     experience: "Experience",
     education: "Education",
-    certifications: "Certifications",
+    projects: "Personal Projects",
     tech: "Tech:",
     languages: "Languages",
   },

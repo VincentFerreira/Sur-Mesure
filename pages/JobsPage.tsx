@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Briefcase, LayoutGrid, List, Loader2, Plus, Sparkles } from 'lucide-react';
+import { Briefcase, CalendarClock, LayoutGrid, List, Loader2, Plus, Sparkles } from 'lucide-react';
 import { useJobsStore } from '../store/jobsStore';
 import { useCvsStore } from '../store/cvsStore';
 import { Job, JOB_STATUSES, JobStatus } from '../types';
 import { STATUS_META } from '../components/jobs/statusMeta';
 import JobsTable from '../components/jobs/JobsTable';
 import JobsKanban from '../components/jobs/JobsKanban';
+import JobsAgenda from '../components/jobs/JobsAgenda';
 import JobForm from '../components/jobs/JobForm';
 import ImportJobDialog from '../components/jobs/ImportJobDialog';
 import { isJobStale } from '../lib/jobStale';
@@ -13,6 +14,17 @@ import { isJobStale } from '../lib/jobStale';
 const VIEW_STORAGE_KEY = 'yarb-jobs-view';
 const APPLIED_STATUSES: JobStatus[] = ['applied', 'screening', 'interview', 'offer'];
 const ACTIVE_STATUSES: JobStatus[] = ['lead', 'to_apply', 'applied', 'screening', 'interview', 'offer'];
+type JobsView = 'table' | 'kanban' | 'agenda';
+const JOBS_VIEWS: JobsView[] = ['table', 'kanban', 'agenda'];
+
+function readStoredView(): JobsView {
+  try {
+    const stored = localStorage.getItem(VIEW_STORAGE_KEY);
+    return JOBS_VIEWS.includes(stored as JobsView) ? (stored as JobsView) : 'table';
+  } catch {
+    return 'table';
+  }
+}
 
 function isDue(job: Job): boolean {
   return Boolean(job.nextActionAt) && new Date(job.nextActionAt!).getTime() <= Date.now();
@@ -27,9 +39,7 @@ const JobsPage: React.FC = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [view, setView] = useState<'table' | 'kanban'>(
-    () => (typeof localStorage !== 'undefined' && localStorage.getItem(VIEW_STORAGE_KEY) === 'kanban' ? 'kanban' : 'table')
-  );
+  const [view, setView] = useState<JobsView>(readStoredView);
 
   useEffect(() => {
     fetchJobs();
@@ -37,7 +47,11 @@ const JobsPage: React.FC = () => {
   }, [fetchJobs, fetchCvs]);
 
   useEffect(() => {
-    localStorage.setItem(VIEW_STORAGE_KEY, view);
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, view);
+    } catch {
+      // storage unavailable (private mode etc.) — view just won't persist
+    }
   }, [view]);
 
   const cvsById = useMemo(() => new Map(cvs.map((c) => [c.id, c])), [cvs]);
@@ -164,6 +178,15 @@ const JobsPage: React.FC = () => {
             >
               <LayoutGrid className="w-3.5 h-3.5" /> Kanban
             </button>
+            <button
+              onClick={() => setView('agenda')}
+              data-testid="view-agenda-button"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                view === 'agenda' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <CalendarClock className="w-3.5 h-3.5" /> Agenda
+            </button>
           </div>
         </div>
 
@@ -198,7 +221,7 @@ const JobsPage: React.FC = () => {
           </div>
         )}
 
-        {!loading && filteredJobs.length === 0 && !error && (
+        {!loading && filteredJobs.length === 0 && !error && (view !== 'agenda' || jobs.length === 0) && (
           <div className="text-center py-16 text-slate-400">
             <Briefcase className="w-8 h-8 mx-auto mb-3 text-slate-300" />
             <p className="mb-1 text-slate-500 font-medium">No jobs match these filters.</p>
@@ -215,6 +238,7 @@ const JobsPage: React.FC = () => {
 
         {!loading && filteredJobs.length > 0 && view === 'table' && <JobsTable jobs={filteredJobs} cvsById={cvsById} />}
         {!loading && filteredJobs.length > 0 && view === 'kanban' && <JobsKanban jobs={filteredJobs} cvsById={cvsById} />}
+        {!loading && view === 'agenda' && jobs.length > 0 && <JobsAgenda jobs={filteredJobs} />}
       </div>
 
       <JobForm open={formOpen} onClose={() => setFormOpen(false)} onSubmit={(input) => addJob(input).then(() => {})} />

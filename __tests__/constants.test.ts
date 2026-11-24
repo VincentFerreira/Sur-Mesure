@@ -96,13 +96,9 @@ describe('INITIAL_CV_DATA', () => {
       }
     });
 
-    it('every education entry has startDate before or equal to endDate (numeric years)', () => {
+    it('every education entry has a single numeric year', () => {
       for (const edu of INITIAL_CV_DATA.education) {
-        const start = parseInt(edu.startDate, 10);
-        const end = parseInt(edu.endDate, 10);
-        if (!isNaN(start) && !isNaN(end)) {
-          expect(start).toBeLessThanOrEqual(end);
-        }
+        expect(edu.year).toMatch(/^\d{4}$/);
       }
     });
   });

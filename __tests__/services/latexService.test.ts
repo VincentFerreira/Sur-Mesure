@@ -44,8 +44,7 @@ const makeCV = (overrides: Partial<CVData> = {}): CVData => ({
       degree: { fr: 'Licence Informatique', en: 'BSc Computer Science' },
       school: 'Université Paris',
       location: 'France',
-      startDate: '2018',
-      endDate: '2021',
+      year: '2021',
       description: { fr: 'Option IA', en: 'AI option' },
     },
   ],
@@ -86,6 +85,31 @@ describe('generateLatex — document structure', () => {
 // ── Content ───────────────────────────────────────────────────────────────────
 
 describe('generateLatex — content', () => {
+  it('renders *words* in experience bullets as \\textbf, escaping their content', () => {
+    const base = makeCV();
+    const latex = generateLatex(makeCV({
+      experience: [{ ...base.experience[0], description: { fr: ['Réduit les bugs de *40 %* grâce à *R&D*'] } }],
+    }));
+    expect(latex).toContain('\\item Réduit les bugs de \\textbf{40 \\%} grâce à \\textbf{R\\&D}');
+    expect(latex).not.toContain('*40');
+  });
+
+  it('renders the availability line right after the title, in the current language', () => {
+    const base = makeCV();
+    const latex = generateLatex(makeCV({
+      personalInfo: { ...base.personalInfo, availability: { fr: 'Disponibilité immédiate', en: 'Available immediately' } },
+    }));
+    expect(latex).toContain('\\faCalendarCheck[regular]\\;Disponibilité immédiate');
+    expect(latex).not.toContain('Available immediately');
+    expect(latex.indexOf('Disponibilité immédiate')).toBeGreaterThan(latex.indexOf('Développeur Full Stack'));
+  });
+
+  it('omits the availability line when the field is absent', () => {
+    const latex = generateLatex(makeCV());
+    expect(latex).not.toContain('\\faCalendarCheck');
+    expect(latex).toContain('{\\large\\color{accent}Développeur Full Stack\\par}');
+  });
+
   it('includes the first and last name', () => {
     const latex = generateLatex(makeCV());
     expect(latex).toContain('Jean');
@@ -134,11 +158,24 @@ describe('generateLatex — content', () => {
 // ── Language switching ────────────────────────────────────────────────────────
 
 describe('generateLatex — language switching', () => {
+  it('merges certifications into the education section, listed before degrees (single FORMATION heading)', () => {
+    const latex = generateLatex(makeCV({ currentLanguage: 'fr' }));
+    expect(latex).toContain('\\cvsection{Formation}');
+    expect(latex).not.toMatch(/\\cvsection\{Certifications\}/);
+    const educationAt = latex.indexOf('\\cvsection{Formation}');
+    const languagesAt = latex.indexOf('\\cvsection{Langues}');
+    const certAt = latex.indexOf('AWS Certified Solutions Architect');
+    const degreeAt = latex.indexOf('Licence Informatique');
+    expect(certAt).toBeGreaterThan(educationAt);
+    expect(certAt).toBeLessThan(degreeAt);
+    expect(degreeAt).toBeLessThan(languagesAt);
+  });
+
   it('uses French section headers when currentLanguage is fr', () => {
     const latex = generateLatex(makeCV({ currentLanguage: 'fr' }));
     expect(latex).toContain('Compétences');
     expect(latex).toContain('Expérience');
-    expect(latex).toContain('Éducation');
+    expect(latex).toContain('Formation');
     expect(latex).toContain('Langues');
   });
 
@@ -227,16 +264,18 @@ describe('generateLatex — LaTeX special-character escaping', () => {
 // ── Photo handling ────────────────────────────────────────────────────────────
 
 describe('generateLatex — photo', () => {
-  it('uses full-width minipage when no photo is set', () => {
+  it('uses the full line width for the header text when no photo is set', () => {
     const latex = generateLatex(makeCV());
-    expect(latex).toContain('\\begin{minipage}{\\textwidth}');
+    expect(latex).toContain('\\setlength{\\headertextwidth}{\\linewidth}');
+    expect(latex).not.toContain('\\includegraphics');
   });
 
   it('uses split minipages when a valid JPEG photo is provided', () => {
     const cv = makeCV();
     cv.personalInfo.photo = 'data:image/jpeg;base64,/9j/abc123';
     const latex = generateLatex(cv);
-    expect(latex).toContain('0.22\\textwidth');
+    expect(latex).toContain('\\setlength{\\headertextwidth}{\\dimexpr\\linewidth-\\headerphotomaxwidth-\\headergap\\relax}');
+    expect(latex).toContain('\\includegraphics');
     expect(latex).toContain('photo.jpg');
   });
 
@@ -247,11 +286,12 @@ describe('generateLatex — photo', () => {
     expect(latex).toContain('photo.png');
   });
 
-  it('falls back to full-width minipage for an invalid data URL', () => {
+  it('falls back to the full-width header for an invalid data URL', () => {
     const cv = makeCV();
     cv.personalInfo.photo = 'https://picsum.photos/200/200';
     const latex = generateLatex(cv);
-    expect(latex).toContain('\\begin{minipage}{\\textwidth}');
+    expect(latex).toContain('\\setlength{\\headertextwidth}{\\linewidth}');
+    expect(latex).not.toContain('\\includegraphics');
   });
 });
 
@@ -329,15 +369,15 @@ describe('generateLatex — missing optional fields', () => {
     const cv = makeCV();
     cv.personalInfo.location = '';
     const latex = generateLatex(cv);
-    expect(latex).toContain('\\faMapMarker*');
-    expect(latex).not.toContain('{Paris, France}');
+    // Empty contact fields are skipped entirely: no orphan icon.
+    expect(latex).not.toContain('\\faMapMarker*');
   });
 
   it('renders correctly when medium is empty', () => {
     const cv = makeCV();
     cv.personalInfo.medium = '';
     const latex = generateLatex(cv);
-    expect(latex).toContain('\\faMedium');
+    expect(latex).not.toContain('\\faMedium');
   });
 });
 
@@ -403,5 +443,62 @@ describe('generateLatex — font selection', () => {
     const cv = makeCV();
     const { latex } = generateLatexWithPhoto(cv, 'times');
     expect(latex).toContain(getFontById('times').latexPackage);
+  });
+});
+
+// ── Personal projects ─────────────────────────────────────────────────────────
+
+describe('generateLatex — personal projects', () => {
+  const project = {
+    id: 'p1',
+    name: 'Sur-Mesure',
+    description: { fr: 'Générateur de CV & suivi de candidatures', en: 'CV builder & job tracker' },
+    techStack: 'React, Node.js, LaTeX',
+  };
+
+  it('omits the section entirely when there are no projects (older CVs without the field)', () => {
+    const latex = generateLatex(makeCV());
+    expect(latex).not.toContain('Projets personnels');
+  });
+
+  it('renders name in bold, description, and tech stack in italics, between experience and education', () => {
+    const latex = generateLatex(makeCV({ projects: [project] }));
+    expect(latex).toContain('\\cvsection{Projets personnels}');
+    expect(latex).toContain('\\textbf{Sur-Mesure}');
+    expect(latex).toContain('Générateur de CV \\& suivi de candidatures');
+    expect(latex).toContain('\\textit{React, Node.js, LaTeX}');
+    // Table built in a box, then placed in the heading's paragraph like education (\needspace/\par there opened a big gap).
+    expect(latex).toMatch(/\\begin\{lrbox\}\{\\projectsbox\}\\begin\{tabularx\}[\s\S]*?\\textbf\{Sur-Mesure\}/);
+    // Reserves the measured table height before the heading, so heading + projects move pages together.
+    expect(latex).toMatch(/\\needspace\{\\dimexpr\\ht\\projectsbox[^\n]*\n\\cvsection\{Projets personnels\}/);
+    expect(latex).toMatch(/\\cvsection\{Projets personnels\}(?:\n%[^\n]*)*\n\\vspace\{0\.15cm\}\n\\usebox\{\\projectsbox\}/);
+    expect(latex).not.toMatch(/\\cvsection\{Projets personnels\}\s*\\needspace/);
+    const projectsAt = latex.indexOf('\\cvsection{Projets personnels}');
+    expect(projectsAt).toBeGreaterThan(latex.indexOf('\\cvsection{Expérience}'));
+    expect(projectsAt).toBeLessThan(latex.indexOf('\\cvsection{Formation}'));
+  });
+
+  it('uses the English heading and description when currentLanguage is en', () => {
+    const latex = generateLatex(makeCV({ currentLanguage: 'en', projects: [project] }));
+    expect(latex).toContain('\\cvsection{Personal Projects}');
+    expect(latex).toContain('CV builder \\& job tracker');
+  });
+
+  it('puts the link right-aligned on the title line, escaped for \\href', () => {
+    const latex = generateLatex(makeCV({ projects: [{ ...project, url: 'https://github.com/jean/sur-mesure#readme' }] }));
+    expect(latex).toContain(
+      '\\textbf{Sur-Mesure}\\hfill{\\small\\href{https://github.com/jean/sur-mesure\\#readme}{\\contacticon{\\faLink}github.com/jean/sur-mesure\\#readme}}'
+    );
+  });
+
+  it('adds https:// to a bare link and renders no link when it is empty', () => {
+    expect(generateLatex(makeCV({ projects: [{ ...project, url: 'github.com/jean/x' }] }))).toContain('\\href{https://github.com/jean/x}');
+    expect(generateLatex(makeCV({ projects: [{ ...project, url: '  ' }] }))).not.toContain('\\faLink}');
+  });
+
+  it('skips the tech line when the stack is empty', () => {
+    const latex = generateLatex(makeCV({ projects: [{ ...project, techStack: '' }] }));
+    expect(latex).toContain('\\textbf{Sur-Mesure}');
+    expect(latex).not.toMatch(/\\textit\{\}/);
   });
 });

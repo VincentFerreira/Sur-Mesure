@@ -64,8 +64,7 @@
       "school": "Université de Lyon",
       "degree": { "fr": "Master Informatique", "en": "Master's in Computer Science" },
       "location": "Lyon, France",
-      "startDate": "2013",
-      "endDate": "2015",
+      "year": "2015",
       "description": { "fr": "Spécialisation systèmes distribués", "en": "Specialization in distributed systems" }
     }
   ],

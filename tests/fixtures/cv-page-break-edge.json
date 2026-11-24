@@ -95,8 +95,7 @@
       "school": "Nantes Université",
       "degree": { "fr": "Master Architecture Logicielle et Génie Logiciel", "en": "Master's Degree in Software Architecture and Software Engineering" },
       "location": "Nantes, France",
-      "startDate": "2006",
-      "endDate": "2008",
+      "year": "2008",
       "description": { "fr": "Spécialisation en architecture de systèmes distribués", "en": "Specialization in distributed systems architecture" }
     }
   ],

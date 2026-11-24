@@ -13,6 +13,7 @@ import { AIProvider, analyzeATS, atsProviderModel, serializeCVForATS } from '../
 import { generateApplicationText } from '../../services/applicationTextService';
 import { STATUS_META } from './statusMeta';
 import JobTimeline from './JobTimeline';
+import JobAppointments from './JobAppointments';
 import JobForm from './JobForm';
 import AtsReport from '../matches/AtsReport';
 
@@ -62,6 +63,19 @@ const JobDetail: React.FC<Props> = ({ jobId }) => {
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [jobId]);
+
+  // Polls this one job while its background experience-insights task is pending —
+  // status lives on the persisted job record (server/routes.jobs.js's
+  // POST /:id/evaluate-experience-matches), not component state, so navigating away
+  // and back or reloading still shows the correct current state even without this
+  // effect having run the whole time; this just keeps the open page live-updating.
+  useEffect(() => {
+    if (job?.experienceInsights?.status !== 'pending') return;
+    const interval = setInterval(() => {
+      getJob(jobId).then(setJob).catch(() => {});
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [jobId, job?.experienceInsights?.status]);
 
   useEffect(() => {
     if (cvs.length === 0) fetchCvs();
@@ -268,6 +282,33 @@ const JobDetail: React.FC<Props> = ({ jobId }) => {
           </div>
         )}
 
+        {job.experienceInsights && (
+          <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6" data-testid="experience-insights-section">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Experience matches</p>
+            {job.experienceInsights.status === 'pending' && (
+              <p className="flex items-center gap-1.5 text-sm text-slate-400" data-testid="experience-insights-pending">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Claude is evaluating your best matches for this job…
+              </p>
+            )}
+            {job.experienceInsights.status === 'error' && (
+              <p className="text-sm text-slate-400" data-testid="experience-insights-error">
+                Couldn&apos;t evaluate experience matches for this job.
+              </p>
+            )}
+            {job.experienceInsights.status === 'done' && (
+              <ul className="space-y-2.5" data-testid="experience-insights-list">
+                {(job.experienceInsights.items ?? []).map((item, i) => (
+                  <li key={i} data-testid="experience-insights-item">
+                    <p className="text-sm text-slate-700 font-medium">{item.experience}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{item.reason}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6" data-testid="application-text-section">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Application text</p>
           {!job.cvId ? (
@@ -446,6 +487,8 @@ const JobDetail: React.FC<Props> = ({ jobId }) => {
             <p className="text-sm text-slate-600 whitespace-pre-wrap">{job.notes}</p>
           </div>
         )}
+
+        <JobAppointments job={job} onChange={setJob} />
 
         <div className="bg-white border border-slate-200 rounded-xl p-4">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Timeline</p>

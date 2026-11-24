@@ -6,6 +6,7 @@ import {
   createCV,
   saveCV,
   deleteCV,
+  duplicateCV,
   autoSaveToLocalStorage,
   restoreFromLocalStorage,
   migrateCV,
@@ -128,6 +129,25 @@ describe('saveCV', () => {
   });
 });
 
+// ── duplicateCV ───────────────────────────────────────────────────────────────
+
+describe('duplicateCV', () => {
+  it('posts to the duplicateOf endpoint and returns the copy metadata', async () => {
+    const meta = { id: 'copy', label: 'My CV (copy)', updatedAt: 2, createdAt: 2 };
+    mockFetch(meta);
+    await expect(duplicateCV('abc')).resolves.toEqual(meta);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/cvs?duplicateOf=abc'),
+      expect.objectContaining({ method: 'POST', body: '{}' })
+    );
+  });
+
+  it('throws when the response is not ok', async () => {
+    mockFetch({ error: 'Not found' }, 404);
+    await expect(duplicateCV('nonexistent')).rejects.toThrow('Failed to duplicate CV');
+  });
+});
+
 // ── deleteCV ──────────────────────────────────────────────────────────────────
 
 describe('deleteCV', () => {
@@ -210,7 +230,26 @@ describe('migrateCV', () => {
     expect(result!.experience[0].role).toEqual({ fr: 'Engineer', en: 'Engineer' });
     expect(result!.experience[0].description).toEqual({ fr: ['Did things'], en: ['Did things'] });
     expect(result!.education[0].degree).toEqual({ fr: 'BSc', en: 'BSc' });
+    expect(result!.education[0].year).toBe('2021');
+    expect(result!.education[0]).not.toHaveProperty('startDate');
+    expect(result!.education[0]).not.toHaveProperty('endDate');
     expect(result!.languages).toEqual({ fr: ['French', 'English'], en: ['French', 'English'] });
+  });
+
+  it('migrates education start/end dates to a single year, falling back to the start year', () => {
+    const base = {
+      personalInfo: { title: 'Dev', summary: 's' },
+      skills: [], experience: [], languages: [],
+    };
+    const result = migrateCV({
+      ...base,
+      education: [
+        { id: 'a', school: 'X', degree: 'D', location: '', startDate: '2018', endDate: '', description: '' },
+        { id: 'b', school: 'Y', degree: 'D', location: '', year: '2015', description: '' },
+      ],
+    });
+    expect(result!.education[0].year).toBe('2018');
+    expect(result!.education[1].year).toBe('2015');
   });
 
   it('leaves already-bilingual objects unchanged', () => {

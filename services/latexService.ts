@@ -2,6 +2,7 @@ import { CVData } from '../types';
 import { getLangText, getLangArray, LATEX_TRANSLATIONS } from '../lib/i18n';
 import { getFontById } from '../lib/fonts';
 import { render } from '../lib/templateEngine';
+import { splitBold } from '../lib/inlineBold';
 import { loadLatexTemplate } from './templateStorageService';
 import rawTemplate from '../templates/cv.mustache?raw';
 
@@ -25,6 +26,12 @@ export const escapeLatex = (str: string): string => {
   return str.replace(/[\\&%$#_{}~^]/g, (ch) => LATEX_ESCAPE_MAP[ch] ?? ch);
 };
 
+// Escapes each segment separately so `*bold*` markers become \textbf{} with escaped content.
+const escapeLatexWithBold = (str: string): string =>
+  splitBold(str ?? '')
+    .map(({ text, bold }) => (bold ? `\\textbf{${escapeLatex(text)}}` : escapeLatex(text)))
+    .join('');
+
 const escapeLatexMultiline = (str: string): string => {
   if (!str) return '';
   const lineBreak = ' \\\\';
@@ -42,6 +49,52 @@ const extractBase64Data = (dataUrl: string | null | undefined): { data: string; 
   return { data: match[2], extension: match[1] === 'jpeg' ? 'jpg' : match[1] };
 };
 
+export interface ContactItem {
+  /** fontawesome5 command name, without the leading backslash (e.g. `faPhone`). */
+  icon: string;
+  /** LaTeX-escaped label shown in the PDF. */
+  text: string;
+  /** Link target, escaped for `\href`; empty when the item is not a link. */
+  url: string;
+}
+
+/** "https://www.linkedin.com/in/x/" -> "linkedin.com/in/x" (display only). */
+export const displayUrl = (url: string): string =>
+  url.trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '');
+
+/**
+ * Escapes a URL for the first argument of `\href`: only `%` and `#` need it there
+ * (hyperref reads the rest verbatim). Adds `https://` when no scheme is given so
+ * "linkedin.com/in/x" still produces a working link.
+ */
+export const hrefUrl = (url: string): string => {
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return withScheme.replace(/\\/g, '').replace(/([%#])/g, '\\$1');
+};
+
+const contact = (icon: string, text: string, url = ''): ContactItem | null =>
+  text.trim() ? { icon, text: escapeLatex(text.trim()), url } : null;
+
+export const buildContactRows = (p: CVData['personalInfo']): { left: ContactItem | null; right: ContactItem | null }[] => {
+  const phone = (p.phone ?? '').trim();
+  const left = [
+    contact('faMapMarker*', p.location),
+    contact('faPhone', phone, phone ? `tel:${phone.replace(/[^\d+]/g, '')}` : ''),
+    contact('faEnvelope', p.email, p.email?.trim() ? hrefUrl(`mailto:${p.email.trim()}`) : ''),
+  ].filter((c): c is ContactItem => c !== null);
+  const right = [
+    contact('faLinkedin', displayUrl(p.linkedin ?? ''), hrefUrl(p.linkedin ?? '')),
+    contact('faMedium', displayUrl(p.medium ?? ''), hrefUrl(p.medium ?? '')),
+    contact('faGithub', displayUrl(p.github ?? ''), hrefUrl(p.github ?? '')),
+  ].filter((c): c is ContactItem => c !== null);
+  return Array.from({ length: Math.max(left.length, right.length) }, (_, i) => ({
+    left: left[i] ?? null,
+    right: right[i] ?? null,
+  }));
+};
+
 export const getTemplate = (): string => loadLatexTemplate() ?? rawTemplate;
 
 interface LatexTemplateData {
@@ -51,17 +104,21 @@ interface LatexTemplateData {
   firstName: string;
   lastName: string;
   title: string;
+  availability: string;
   location: string;
   email: string;
+  phone: string;
   medium: string;
   linkedin: string;
   github: string;
+  /** Header contact grid: personal details on the left, web profiles on the right. */
+  contactRows: { left: ContactItem | null; right: ContactItem | null }[];
   summary: string;
   tSkills: string;
   tExperience: string;
   tEducation: string;
-  tCertifications: string;
   tLanguages: string;
+  tProjects: string;
   tTech: string;
   skills: { name: string; items: string }[];
   experience: {
@@ -75,13 +132,15 @@ interface LatexTemplateData {
     hasSpacing: boolean;
   }[];
   education: {
-    startDate: string;
-    endDate: string;
+    year: string;
     degree: string;
     school: string;
     location: string;
     description: string;
   }[];
+  hasProjects: boolean;
+  /** `url` is escaped for \href (empty when no link); `urlText` is the escaped label. */
+  projects: { name: string; description: string; techStack: string; url: string; urlText: string }[];
   certifications: {
     year: string;
     title: string;
@@ -91,7 +150,7 @@ interface LatexTemplateData {
 }
 
 const buildTemplateData = (data: CVData, fontId?: string): LatexTemplateData => {
-  const { personalInfo, skills, experience, education, certifications, languages, currentLanguage } = data;
+  const { personalInfo, skills, experience, education, certifications, projects, languages, currentLanguage } = data;
   const t = LATEX_TRANSLATIONS[currentLanguage] ?? LATEX_TRANSLATIONS['fr'];
   const photoData = extractBase64Data(personalInfo.photo);
 
@@ -102,8 +161,11 @@ const buildTemplateData = (data: CVData, fontId?: string): LatexTemplateData => 
     firstName: escapeLatex(personalInfo.firstName),
     lastName: escapeLatex(personalInfo.lastName),
     title: escapeLatex(getLangText(personalInfo.title, currentLanguage)),
+    availability: escapeLatex(getLangText(personalInfo.availability, currentLanguage)),
     location: escapeLatex(personalInfo.location),
     email: escapeLatex(personalInfo.email),
+    phone: escapeLatex(personalInfo.phone ?? ''),
+    contactRows: buildContactRows(personalInfo),
     medium: escapeLatex(personalInfo.medium),
     linkedin: escapeLatex(personalInfo.linkedin),
     github: escapeLatex(personalInfo.github),
@@ -111,8 +173,8 @@ const buildTemplateData = (data: CVData, fontId?: string): LatexTemplateData => 
     tSkills: t.skills,
     tExperience: t.experience,
     tEducation: t.education,
-    tCertifications: t.certifications,
     tLanguages: t.languages,
+    tProjects: t.projects,
     tTech: t.tech,
     skills: skills.map(s => ({
       name: escapeLatex(getLangText(s.name, currentLanguage)),
@@ -124,17 +186,24 @@ const buildTemplateData = (data: CVData, fontId?: string): LatexTemplateData => 
       role: escapeLatex(getLangText(exp.role, currentLanguage)),
       company: escapeLatex(exp.company),
       location: escapeLatex(exp.location),
-      description: getLangArray(exp.description, currentLanguage).map(escapeLatex),
+      description: getLangArray(exp.description, currentLanguage).map(escapeLatexWithBold),
       techStack: escapeLatex(exp.techStack),
       hasSpacing: i < experience.length - 1,
     })),
     education: education.map(edu => ({
-      startDate: escapeLatex(edu.startDate),
-      endDate: escapeLatex(edu.endDate),
+      year: escapeLatex(edu.year),
       degree: escapeLatex(getLangText(edu.degree, currentLanguage)),
       school: escapeLatex(edu.school),
       location: escapeLatex(edu.location),
       description: escapeLatex(getLangText(edu.description, currentLanguage)),
+    })),
+    hasProjects: (projects ?? []).length > 0,
+    projects: (projects ?? []).map(project => ({
+      name: escapeLatex(project.name),
+      description: escapeLatexMultiline(getLangText(project.description, currentLanguage)),
+      techStack: escapeLatex(project.techStack),
+      url: hrefUrl(project.url ?? ''),
+      urlText: escapeLatex(displayUrl(project.url ?? '')),
     })),
     certifications: (certifications ?? []).map(cert => ({
       year: escapeLatex(cert.year),

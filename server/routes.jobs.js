@@ -14,6 +14,72 @@ const EVENT_TYPES = ['status_change', 'note', 'follow_up', 'interview', 'match_s
 // Mirrors types.ts's APPLICATION_TEXT_TYPES — duplicated rather than imported (plain
 // Node, no TS loader), same convention as JOB_STATUSES above.
 const APPLICATION_TEXT_TYPES = ['quick_pitch', 'full_pitch', 'referral_message'];
+// Mirrors types.ts's APPOINTMENT_TYPES (same duplication convention).
+const APPOINTMENT_TYPES = ['call', 'interview', 'follow_up', 'deadline', 'other'];
+// Marking one of these done also logs a past-tense JobEvent on the job's timeline.
+const APPOINTMENT_DONE_EVENT = { call: 'follow_up', follow_up: 'follow_up', interview: 'interview' };
+
+/**
+ * Derives `nextActionAt`/`nextActionLabel` from the earliest not-done appointment, so
+ * the existing nextActionAt sort, the "Follow-ups due" KPI and the table's "Next action"
+ * column keep working off a single field. Clears both when nothing is pending.
+ * Returns a new job object.
+ */
+export function syncNextAction(job) {
+    const pending = (job.appointments ?? [])
+        .filter((a) => !a.done)
+        .sort((a, b) => a.at.localeCompare(b.at));
+    const next = { ...job };
+    if (pending.length === 0) {
+        delete next.nextActionAt;
+        delete next.nextActionLabel;
+    } else {
+        next.nextActionAt = pending[0].at;
+        next.nextActionLabel = pending[0].label;
+    }
+    return next;
+}
+
+// Validates + normalizes appointment fields. `partial` allows omitted fields (PATCH).
+// Returns { value } or { error: [code, message] }.
+function parseAppointmentInput(body, { partial }) {
+    const value = {};
+    if (body.at !== undefined || !partial) {
+        if (typeof body.at !== 'string' || Number.isNaN(Date.parse(body.at))) {
+            return { error: ['invalid_at', 'at must be a valid ISO date'] };
+        }
+        value.at = new Date(body.at).toISOString();
+    }
+    if (body.type !== undefined || !partial) {
+        if (!APPOINTMENT_TYPES.includes(body.type)) {
+            return { error: ['invalid_type', `type must be one of: ${APPOINTMENT_TYPES.join(', ')}`] };
+        }
+        value.type = body.type;
+    }
+    if (body.label !== undefined || !partial) {
+        if (typeof body.label !== 'string' || !body.label.trim()) {
+            return { error: ['invalid_label', 'label is required'] };
+        }
+        value.label = body.label.trim();
+    }
+    for (const key of ['contact', 'notes']) {
+        if (body[key] !== undefined) {
+            if (body[key] !== null && typeof body[key] !== 'string') {
+                return { error: [`invalid_${key}`, `${key} must be a string`] };
+            }
+            value[key] = body[key]?.trim() || undefined;
+        }
+    }
+    if (body.done !== undefined) {
+        if (typeof body.done !== 'boolean') return { error: ['invalid_done', 'done must be a boolean'] };
+        value.done = body.done;
+    }
+    return { value };
+}
+
+function stripUndefined(obj) {
+    return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+}
 
 function errorBody(code, message) {
     return { error: { code, message } };
@@ -165,7 +231,10 @@ export function createJobsRouter({ jobsDir, cvsDir }) {
         }
 
         const now = new Date().toISOString();
-        const updated = { ...existing, ...body, updatedAt: now };
+        // appointments are only changed through the dedicated /:id/appointments routes,
+        // which also keep nextActionAt in sync.
+        const { appointments: _ignored, ...patch } = body;
+        const updated = { ...existing, ...patch, updatedAt: now };
 
         if (body.status !== undefined && body.status !== existing.status) {
             updated.events = [
@@ -220,6 +289,99 @@ export function createJobsRouter({ jobsDir, cvsDir }) {
             res.json(updated);
         } catch {
             res.status(404).json(errorBody('not_found', 'Job not found'));
+        }
+    });
+
+    router.post('/:id/appointments', async (req, res) => {
+        const { id } = req.params;
+        if (!isValidId(id)) return res.status(400).json(errorBody('invalid_id', 'Invalid ID'));
+        const parsed = parseAppointmentInput(req.body ?? {}, { partial: false });
+        if (parsed.error) return res.status(400).json(errorBody(...parsed.error));
+
+        const filePath = path.join(jobsDir, `${id}.json`);
+        let existing;
+        try {
+            existing = await readJson(filePath);
+        } catch {
+            return res.status(404).json(errorBody('not_found', 'Job not found'));
+        }
+        const now = new Date().toISOString();
+        const appointment = { id: randomUUID(), ...stripUndefined(parsed.value), done: false, createdAt: now };
+        const updated = syncNextAction({
+            ...existing,
+            appointments: [...(existing.appointments ?? []), appointment],
+            updatedAt: now,
+        });
+        try {
+            await writeJsonAtomic(filePath, updated);
+            res.status(201).json(updated);
+        } catch (err) {
+            res.status(500).json(errorBody('internal_error', err.message));
+        }
+    });
+
+    router.patch('/:id/appointments/:apptId', async (req, res) => {
+        const { id, apptId } = req.params;
+        if (!isValidId(id) || !isValidId(apptId)) return res.status(400).json(errorBody('invalid_id', 'Invalid ID'));
+        const parsed = parseAppointmentInput(req.body ?? {}, { partial: true });
+        if (parsed.error) return res.status(400).json(errorBody(...parsed.error));
+
+        const filePath = path.join(jobsDir, `${id}.json`);
+        let existing;
+        try {
+            existing = await readJson(filePath);
+        } catch {
+            return res.status(404).json(errorBody('not_found', 'Job not found'));
+        }
+        const appointments = existing.appointments ?? [];
+        const current = appointments.find((a) => a.id === apptId);
+        if (!current) return res.status(404).json(errorBody('not_found', 'Appointment not found'));
+
+        const now = new Date().toISOString();
+        const next = stripUndefined({ ...current, ...parsed.value });
+        let events = existing.events;
+        const eventType = APPOINTMENT_DONE_EVENT[next.type];
+        if (next.done && !current.done && eventType) {
+            events = [...events, { id: randomUUID(), at: now, type: eventType, comment: next.label }];
+        }
+        const updated = syncNextAction({
+            ...existing,
+            events,
+            appointments: appointments.map((a) => (a.id === apptId ? next : a)),
+            updatedAt: now,
+        });
+        try {
+            await writeJsonAtomic(filePath, updated);
+            res.json(updated);
+        } catch (err) {
+            res.status(500).json(errorBody('internal_error', err.message));
+        }
+    });
+
+    router.delete('/:id/appointments/:apptId', async (req, res) => {
+        const { id, apptId } = req.params;
+        if (!isValidId(id) || !isValidId(apptId)) return res.status(400).json(errorBody('invalid_id', 'Invalid ID'));
+        const filePath = path.join(jobsDir, `${id}.json`);
+        let existing;
+        try {
+            existing = await readJson(filePath);
+        } catch {
+            return res.status(404).json(errorBody('not_found', 'Job not found'));
+        }
+        const appointments = existing.appointments ?? [];
+        if (!appointments.some((a) => a.id === apptId)) {
+            return res.status(404).json(errorBody('not_found', 'Appointment not found'));
+        }
+        const updated = syncNextAction({
+            ...existing,
+            appointments: appointments.filter((a) => a.id !== apptId),
+            updatedAt: new Date().toISOString(),
+        });
+        try {
+            await writeJsonAtomic(filePath, updated);
+            res.json(updated);
+        } catch (err) {
+            res.status(500).json(errorBody('internal_error', err.message));
         }
     });
 
@@ -290,7 +452,67 @@ export function createJobsRouter({ jobsDir, cvsDir }) {
         }
     });
 
+    // Auto-triggered by the Discovery "Apply" flow (JobSearchPage.tsx's handleSubmit)
+    // right after creating the job, when a search CV is configured — NOT a manual
+    // button. Body: { cvText }. Responds immediately with the job marked 'pending';
+    // the actual claude CLI call runs after the response is sent (not awaited here) and
+    // writes its result back onto the job record once done, which the client picks up
+    // via polling GET /:id. Every write below re-reads the job fresh and merges only
+    // the `experienceInsights` key — never the full record — so a concurrent PATCH
+    // (status/notes/etc.) landing while this background call is in flight isn't
+    // reverted by a stale read-modify-write.
+    router.post('/:id/evaluate-experience-matches', async (req, res) => {
+        const { id } = req.params;
+        if (!isValidId(id)) return res.status(400).json(errorBody('invalid_id', 'Invalid ID'));
+
+        const { cvText } = req.body ?? {};
+        if (typeof cvText !== 'string' || cvText.trim().length === 0) {
+            return res.status(400).json(errorBody('invalid_body', 'cvText is required'));
+        }
+
+        const filePath = path.join(jobsDir, `${id}.json`);
+        let job;
+        try {
+            job = await readJson(filePath);
+        } catch {
+            return res.status(404).json(errorBody('not_found', 'Job not found'));
+        }
+
+        const startedAt = new Date().toISOString();
+        const pending = {
+            ...job,
+            experienceInsights: { status: 'pending', startedAt },
+            updatedAt: startedAt,
+        };
+        await writeJsonAtomic(filePath, pending);
+        res.json(pending);
+
+        // Fire-and-forget: keeps running in this same Node process after the response
+        // above is sent. Must never throw/reject unhandled — any failure here is only
+        // ever surfaced as a persisted experienceInsights.status: 'error'.
+        (async () => {
+            try {
+                const items = useFakeAi()
+                    ? await fake.evaluateExperienceMatches(job.title, job.company, job.descriptionRaw, cvText)
+                    : await claudeCli.evaluateExperienceMatches(job.title, job.company, job.descriptionRaw, cvText);
+                await mergeExperienceInsights(filePath, { status: 'done', items, startedAt, completedAt: new Date().toISOString() });
+            } catch (err) {
+                await mergeExperienceInsights(filePath, {
+                    status: 'error',
+                    errorMessage: err.message,
+                    startedAt,
+                    completedAt: new Date().toISOString(),
+                }).catch(() => {});
+            }
+        })();
+    });
+
     return router;
+}
+
+async function mergeExperienceInsights(filePath, experienceInsights) {
+    const fresh = await readJson(filePath);
+    await writeJsonAtomic(filePath, { ...fresh, experienceInsights, updatedAt: new Date().toISOString() });
 }
 
 // Condensed digest of an already-computed ATS result, passed as extra grounding to

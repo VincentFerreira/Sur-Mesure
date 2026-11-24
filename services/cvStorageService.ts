@@ -42,7 +42,8 @@ export async function saveCV(id: string, label: string, data: CVData): Promise<C
   return res.json();
 }
 
-export async function duplicateCV(sourceId: string, label: string): Promise<CVMeta> {
+// Without a label, the server names the copy "<source label> (copy)".
+export async function duplicateCV(sourceId: string, label?: string): Promise<CVMeta> {
   const res = await fetch(`${API_BASE}/cvs?duplicateOf=${sourceId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -105,8 +106,11 @@ export function migrateCV(json: any): CVData | null {
     description: toBilingualArray(exp.description),
   }));
 
-  migrated.education = migrated.education.map((edu: any) => ({
+  // Education used to have startDate/endDate; it now has a single `year`.
+  // Keep the end year (falling back to the start year) for older CVs.
+  migrated.education = migrated.education.map(({ startDate, endDate, ...edu }: any) => ({
     ...edu,
+    year: edu.year ?? (endDate || startDate || ''),
     degree: toBilingual(edu.degree),
     description: toBilingual(edu.description),
   }));
@@ -118,6 +122,13 @@ export function migrateCV(json: any): CVData | null {
     }));
   } else {
     migrated.certifications = [];
+  }
+
+  if (Array.isArray(migrated.projects)) {
+    migrated.projects = migrated.projects.map((project: any) => ({
+      ...project,
+      description: toBilingual(project.description),
+    }));
   }
 
   if (Array.isArray(migrated.languages)) {

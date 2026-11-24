@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, FileText, Trash2, Loader2 } from 'lucide-react';
+import { Plus, FileText, Trash2, Loader2, Copy } from 'lucide-react';
 import { useCvsStore } from '../store/cvsStore';
 
 function formatDate(ts: number): string {
@@ -16,8 +16,9 @@ function formatDate(ts: number): string {
 }
 
 const CvsPage: React.FC = () => {
-  const { cvs, loading, error, fetchCvs, archiveCv } = useCvsStore();
+  const { cvs, loading, error, fetchCvs, archiveCv, duplicateCv } = useCvsStore();
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCvs();
@@ -30,6 +31,12 @@ const CvsPage: React.FC = () => {
     }
     setConfirmId(null);
     archiveCv(id);
+  };
+
+  const handleDuplicate = async (id: string) => {
+    setDuplicatingId(id);
+    await duplicateCv(id);
+    setDuplicatingId(null);
   };
 
   return (
@@ -99,17 +106,32 @@ const CvsPage: React.FC = () => {
                 >
                   Edit
                 </Link>
-                <button
-                  onClick={() => handleArchive(cv.id)}
-                  onBlur={() => setConfirmId(null)}
-                  className={`flex items-center gap-1 text-xs font-medium transition-colors ${
-                    confirmId === cv.id ? 'text-red-600 hover:text-red-800' : 'text-slate-300 hover:text-red-500'
-                  }`}
-                  title={confirmId === cv.id ? 'Click to confirm' : 'Archive'}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  {confirmId === cv.id ? 'Confirm?' : ''}
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handleDuplicate(cv.id)}
+                    disabled={duplicatingId !== null}
+                    data-testid={`cv-duplicate-${cv.id}`}
+                    className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-indigo-600 disabled:opacity-50 transition-colors"
+                  >
+                    {duplicatingId === cv.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                    Duplicate
+                  </button>
+                  <button
+                    onClick={() => handleArchive(cv.id)}
+                    onBlur={() => setConfirmId(null)}
+                    className={`flex items-center gap-1 text-xs font-medium transition-colors ${
+                      confirmId === cv.id ? 'text-red-600 hover:text-red-800' : 'text-slate-300 hover:text-red-500'
+                    }`}
+                    title={confirmId === cv.id ? 'Click to confirm' : 'Archive'}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {confirmId === cv.id ? 'Confirm?' : ''}
+                  </button>
+                </div>
               </div>
             </div>
           ))}

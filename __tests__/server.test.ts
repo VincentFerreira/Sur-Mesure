@@ -69,6 +69,60 @@ describe('POST /api/cvs', () => {
   });
 });
 
+describe('POST /api/cvs?duplicateOf', () => {
+  const data = { currentLanguage: 'en', personalInfo: { firstName: 'Source' } };
+  const createdIds: string[] = [];
+  let sourceId: string;
+
+  beforeAll(async () => {
+    const res = await request(app)
+      .post('/api/cvs')
+      .send({ label: 'Source CV', language: 'en', tags: ['backend'], data });
+    sourceId = res.body.id;
+    createdIds.push(sourceId);
+  });
+
+  afterAll(async () => {
+    await Promise.all(createdIds.map((id) => request(app).delete(`/api/cvs/${id}`)));
+  });
+
+  it('creates an independent copy with default label, same content and metadata', async () => {
+    const res = await request(app).post(`/api/cvs?duplicateOf=${sourceId}`).send({});
+    expect(res.status).toBe(200);
+    createdIds.push(res.body.id);
+    expect(res.body.id).not.toBe(sourceId);
+    expect(res.body.label).toBe('Source CV (copy)');
+    expect(res.body.language).toBe('en');
+    expect(res.body.tags).toEqual(['backend']);
+
+    const copy = await request(app).get(`/api/cvs/${res.body.id}`);
+    expect(copy.body.data).toEqual(data);
+
+    await request(app).put(`/api/cvs/${res.body.id}`).send({ data: { ...data, currentLanguage: 'fr' } });
+    const source = await request(app).get(`/api/cvs/${sourceId}`);
+    expect(source.body.data).toEqual(data);
+    expect(source.body.label).toBe('Source CV');
+  });
+
+  it('uses the provided label when given', async () => {
+    const res = await request(app).post(`/api/cvs?duplicateOf=${sourceId}`).send({ label: 'Tailored' });
+    createdIds.push(res.body.id);
+    expect(res.body.label).toBe('Tailored');
+  });
+
+  it('returns 400 for an invalid source id', async () => {
+    const res = await request(app).post('/api/cvs?duplicateOf=not-a-uuid').send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when the source CV does not exist', async () => {
+    const res = await request(app)
+      .post('/api/cvs?duplicateOf=00000000-0000-0000-0000-000000000000')
+      .send({});
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('GET /api/cvs/:id', () => {
   let localId: string;
 
@@ -475,6 +529,79 @@ describe('Jobs API', () => {
     });
   });
 
+  describe('appointments', () => {
+    let jobId: string;
+
+    beforeAll(async () => {
+      const res = await request(app)
+        .post('/api/jobs')
+        .send({ company: 'Externatic', title: 'Dev', descriptionRaw: 'd' });
+      jobId = res.body.id;
+      jobIdsToClean.push(jobId);
+    });
+
+    it('adds an appointment and derives nextActionAt from the earliest pending one', async () => {
+      const later = await request(app)
+        .post(`/api/jobs/${jobId}/appointments`)
+        .send({ at: '2030-01-20T10:00:00.000Z', type: 'interview', label: 'Tech interview' });
+      expect(later.status).toBe(201);
+      expect(later.body.nextActionLabel).toBe('Tech interview');
+
+      const sooner = await request(app)
+        .post(`/api/jobs/${jobId}/appointments`)
+        .send({ at: '2030-01-10T09:30:00.000Z', type: 'call', label: 'Recruiter call', contact: 'Externatic' });
+      expect(sooner.status).toBe(201);
+      expect(sooner.body.appointments).toHaveLength(2);
+      expect(sooner.body.appointments[1]).toMatchObject({ contact: 'Externatic', done: false });
+      expect(sooner.body.nextActionAt).toBe('2030-01-10T09:30:00.000Z');
+      expect(sooner.body.nextActionLabel).toBe('Recruiter call');
+    });
+
+    it('rejects invalid input', async () => {
+      const url = `/api/jobs/${jobId}/appointments`;
+      expect((await request(app).post(url).send({ at: 'nope', type: 'call', label: 'x' })).status).toBe(400);
+      expect((await request(app).post(url).send({ at: '2030-01-01', type: 'bogus', label: 'x' })).status).toBe(400);
+      expect((await request(app).post(url).send({ at: '2030-01-01', type: 'call', label: '  ' })).status).toBe(400);
+    });
+
+    it('marking done logs a timeline event and moves nextActionAt to the next pending one', async () => {
+      const job = (await request(app).get(`/api/jobs/${jobId}`)).body;
+      const call = job.appointments.find((a: { label: string }) => a.label === 'Recruiter call');
+      const res = await request(app).patch(`/api/jobs/${jobId}/appointments/${call.id}`).send({ done: true });
+      expect(res.status).toBe(200);
+      expect(res.body.events.at(-1)).toMatchObject({ type: 'follow_up', comment: 'Recruiter call' });
+      expect(res.body.nextActionLabel).toBe('Tech interview');
+    });
+
+    it('clears a removed optional field on edit', async () => {
+      const job = (await request(app).get(`/api/jobs/${jobId}`)).body;
+      const call = job.appointments.find((a: { label: string }) => a.label === 'Recruiter call');
+      const res = await request(app).patch(`/api/jobs/${jobId}/appointments/${call.id}`).send({ contact: '' });
+      expect(res.body.appointments.find((a: { id: string }) => a.id === call.id).contact).toBeUndefined();
+    });
+
+    it('ignores appointments sent through PATCH /api/jobs/:id', async () => {
+      const res = await request(app).patch(`/api/jobs/${jobId}`).send({ appointments: [] });
+      expect(res.body.appointments).toHaveLength(2);
+    });
+
+    it('deleting the last pending appointment clears nextActionAt', async () => {
+      const job = (await request(app).get(`/api/jobs/${jobId}`)).body;
+      const interview = job.appointments.find((a: { label: string }) => a.label === 'Tech interview');
+      const res = await request(app).delete(`/api/jobs/${jobId}/appointments/${interview.id}`);
+      expect(res.status).toBe(200);
+      expect(res.body.nextActionAt).toBeUndefined();
+      expect(res.body.nextActionLabel).toBeUndefined();
+    });
+
+    it('returns 404 for an unknown appointment', async () => {
+      const res = await request(app)
+        .patch(`/api/jobs/${jobId}/appointments/00000000-0000-0000-0000-000000000000`)
+        .send({ done: true });
+      expect(res.status).toBe(404);
+    });
+  });
+
   describe('POST /api/jobs/:id/score', () => {
     let jobId: string;
 
@@ -568,6 +695,54 @@ describe('Jobs API', () => {
         .post('/api/jobs/00000000-0000-0000-0000-000000000000/generate-application-text')
         .send({ textType: 'quick_pitch', cvText: 'some cv text' });
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe('POST /api/jobs/:id/evaluate-experience-matches', () => {
+    let jobId: string;
+
+    beforeAll(async () => {
+      const res = await request(app)
+        .post('/api/jobs')
+        .send({ company: 'Insights Co', title: 'Dev', descriptionRaw: 'Looking for a React developer' });
+      jobId = res.body.id;
+      jobIdsToClean.push(jobId);
+    });
+
+    it('returns 400 when cvText is missing or empty', async () => {
+      const res = await request(app)
+        .post(`/api/jobs/${jobId}/evaluate-experience-matches`)
+        .send({ cvText: '' });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 for an unknown job', async () => {
+      const res = await request(app)
+        .post('/api/jobs/00000000-0000-0000-0000-000000000000/evaluate-experience-matches')
+        .send({ cvText: 'some cv text' });
+      expect(res.status).toBe(404);
+    });
+
+    // NODE_ENV=test (set by vitest) makes routes.jobs.js's useFakeAi() true, so the
+    // background completion hits server/scrapers/fake.js's evaluateExperienceMatches —
+    // no real CLI call. The response only waits for the 'pending' write; the 'done'
+    // write happens after, so this polls GET /:id with a short retry loop, the same
+    // way a real client would observe it.
+    it('marks the job pending immediately, then done with items once the background call resolves', async () => {
+      const postRes = await request(app)
+        .post(`/api/jobs/${jobId}/evaluate-experience-matches`)
+        .send({ cvText: 'EXPERIENCE\n- Automated a full regression suite' });
+      expect(postRes.status).toBe(200);
+      expect(postRes.body.experienceInsights.status).toBe('pending');
+
+      let job = postRes.body;
+      for (let i = 0; i < 20 && job.experienceInsights.status === 'pending'; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+        job = (await request(app).get(`/api/jobs/${jobId}`)).body;
+      }
+      expect(job.experienceInsights.status).toBe('done');
+      expect(job.experienceInsights.items.length).toBeGreaterThan(0);
+      expect(job.experienceInsights.items[0].experience).toContain('Automated a full regression suite');
     });
   });
 });

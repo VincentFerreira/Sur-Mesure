@@ -1,4 +1,4 @@
-import { AtsResult, Job, JobEvent, JobStatus } from '../types';
+import { AtsResult, Job, JobAppointment, JobEvent, JobStatus } from '../types';
 import { apiFetch } from './apiClient';
 
 export interface ListJobsParams {
@@ -57,6 +57,37 @@ export async function addJobEvent(
   event: Pick<JobEvent, 'type' | 'comment' | 'from' | 'to'>
 ): Promise<Job> {
   return apiFetch<Job>(`/jobs/${id}/events`, { method: 'POST', body: JSON.stringify(event) }, 'Failed to add event');
+}
+
+export type AppointmentInput = Pick<JobAppointment, 'at' | 'type' | 'label'> &
+  Partial<Pick<JobAppointment, 'contact' | 'notes'>>;
+
+export async function addAppointment(jobId: string, input: AppointmentInput): Promise<Job> {
+  return apiFetch<Job>(
+    `/jobs/${jobId}/appointments`,
+    { method: 'POST', body: JSON.stringify(input) },
+    'Failed to add appointment'
+  );
+}
+
+export async function updateAppointment(
+  jobId: string,
+  appointmentId: string,
+  patch: Partial<AppointmentInput> & { done?: boolean }
+): Promise<Job> {
+  return apiFetch<Job>(
+    `/jobs/${jobId}/appointments/${appointmentId}`,
+    { method: 'PATCH', body: JSON.stringify(patch) },
+    'Failed to update appointment'
+  );
+}
+
+export async function deleteAppointment(jobId: string, appointmentId: string): Promise<Job> {
+  return apiFetch<Job>(
+    `/jobs/${jobId}/appointments/${appointmentId}`,
+    { method: 'DELETE' },
+    'Failed to delete appointment'
+  );
 }
 
 export async function scoreJob(

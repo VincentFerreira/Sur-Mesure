@@ -82,8 +82,9 @@ interface Job {
   keywords: string[];              // extraits par IA, éditables à la main
   activeMatchId?: string;          // le CV réellement envoyé / retenu
   appliedAt?: string;
-  nextActionAt?: string;           // date de relance
-  nextActionLabel?: string;        // "relancer JB"
+  nextActionAt?: string;           // date de relance — dérivée du prochain rendez-vous non fait
+  nextActionLabel?: string;        // "relancer JB" — idem
+  appointments?: JobAppointment[]; // rendez-vous / échéances à venir (absent = [])
   notes?: string;                  // markdown libre
   events: JobEvent[];
   createdAt: string;
@@ -98,6 +99,23 @@ interface JobEvent {
   to?: JobStatus;
   comment?: string;
 }
+
+// Rendez-vous / échéances (futur), à ne pas confondre avec JobEvent (passé).
+interface JobAppointment {
+  id: string;
+  at: string;                                   // ISO, date/heure prévue
+  type: 'call' | 'interview' | 'follow_up' | 'deadline' | 'other';
+  label: string;                                // "Point avec la chasseuse de têtes"
+  contact?: string;                             // "Externatic"
+  notes?: string;
+  done: boolean;
+  createdAt: string;
+}
+// API : POST /jobs/:id/appointments, PATCH|DELETE /jobs/:id/appointments/:apptId.
+// À chaque modification, le serveur recalcule nextActionAt/nextActionLabel à partir du
+// prochain rendez-vous non fait. Marquer fait un call/follow_up/interview ajoute un
+// JobEvent (follow_up / interview) à l'historique. Vue « Agenda » de la page Jobs :
+// timeline groupée En retard / Aujourd'hui / 7 prochains jours / Plus tard.
 ```
 
 `events` est **append-only** : c'est la timeline du suivi, et la seule source de vérité de l'historique. Tout changement de statut génère automatiquement un `status_change`.
